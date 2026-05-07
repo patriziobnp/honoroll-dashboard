@@ -1,1 +1,1764 @@
-<h1>Honoroll Marketing Dashboard</h1>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Honoroll Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}html,body,#root{min-height:100vh}
+    body{background:#0B0E11;color:#C8CDD3;font-family:'DM Sans',sans-serif}
+    ::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:rgba(200,205,211,0.1);border-radius:3px}
+    @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.85)}}
+    @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+    @keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+    button:hover{opacity:0.85}
+    #loading-msg{display:flex;align-items:center;justify-content:center;height:100vh;color:#6B7280;font-size:14px;font-family:'DM Sans',sans-serif}
+  </style>
+  <script src="https://unpkg.com/react@18.2.0/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/react-is@18.2.0/umd/react-is.production.min.js"></script>
+  <script src="https://unpkg.com/prop-types@15.8.1/prop-types.min.js"></script>
+  <script src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.24.0/babel.min.js"></script>
+</head>
+<body>
+  <div id="root"><div id="loading-msg">Loading dashboard...</div></div>
+  <script type="text/babel">
+const { useState, useEffect, useCallback, useRef } = React;
+const { BarChart, Bar, AreaChart, ComposedChart, Area, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } = Recharts;
+
+// ─── Palette & Fonts ─────────────────────────────────────────────────────────
+const C = {
+  bg:"#0B0E11",surface:"rgba(200,205,211,0.03)",border:"rgba(200,205,211,0.06)",
+  text:"#C8CDD3",bright:"#E8ECEF",muted:"#6B7280",dim:"#4B5563",
+  accent:"#D9AA5A",accentSoft:"rgba(217,170,90,0.08)",
+  blue:"#5AB8D9",green:"#34D399",greenSoft:"rgba(52,211,153,0.08)",greenBdr:"rgba(52,211,153,0.15)",
+  red:"#F87171",redSoft:"rgba(248,113,113,0.08)",pink:"#D95A8C",lime:"#8CD95A",purple:"#B05AD9",
+};
+const EVT=[C.accent,C.blue,C.pink,C.lime,C.purple];
+const GEO=["#D9AA5A","#C49A4E","#AF8A42","#9A7A36","#856A2A","#705A1E","#5B4A12","#463A06","#3A3000","#2E2600"];
+const font=`'DM Sans',sans-serif`;
+const mono=`'JetBrains Mono',monospace`;
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+const toFlag=(code)=>code?String.fromCodePoint(...[...code.toUpperCase()].map(c=>0x1F1E6-65+c.charCodeAt(0))):"";
+const fmt=(n)=>n>=1e6?(n/1e6).toFixed(1)+"M":n>=1e3?(n/1e3).toFixed(1)+"K":n.toString();
+const pctD=(c,p)=>{if(!p)return{v:"∞",up:true};const d=((c-p)/p)*100;return{v:Math.abs(d).toFixed(1),up:d>=0};};
+const durFmt=(ms,v)=>{if(!v)return"0m 00s";const s=Math.floor(ms/v/1000);return`${Math.floor(s/60)}m ${(s%60).toString().padStart(2,"0")}s`;};
+const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
+
+// ─── Date Range Helpers ──────────────────────────────────────────────────────
+const DATE_RANGES = [
+  {id:"24h",label:"Last 24h"},
+  {id:"7d",label:"Last 7 days"},
+  {id:"30d",label:"Last 30 days"},
+  {id:"all",label:"All time"},
+];
+
+const COMPARE_MODES = [
+  {id:"previous",label:"Previous period"},
+  {id:"week_ago",label:"Same period last week"},
+  {id:"year_ago",label:"Same period last year"},
+  {id:"none",label:"No comparison"},
+];
+
+const RANGE_DURATIONS_MS = {
+  "24h":24*60*60*1000,
+  "7d":7*24*60*60*1000,
+  "30d":30*24*60*60*1000,
+};
+
+function getRange(rangeId) {
+  const now=new Date();
+  const endAt=now.getTime();
+  let startAt;
+  switch(rangeId) {
+    case "24h": { startAt=endAt-RANGE_DURATIONS_MS["24h"]; break; }
+    case "7d": { const s=new Date(now);s.setDate(s.getDate()-6);s.setHours(0,0,0,0);startAt=s.getTime();break; }
+    case "30d": { const s=new Date(now);s.setDate(s.getDate()-29);s.setHours(0,0,0,0);startAt=s.getTime();break; }
+    case "all": { const s=new Date(2020,0,1);startAt=s.getTime();break; }
+    default: { startAt=endAt-RANGE_DURATIONS_MS["24h"]; break; }
+  }
+  return {startAt,endAt};
+}
+
+function getComparisonRange(rangeId,compareMode="previous") {
+  if(rangeId==="all"||compareMode==="none") return null;
+  const primary=getRange(rangeId);
+  const duration=primary.endAt-primary.startAt;
+  if(compareMode==="week_ago") {
+    const offset=7*24*60*60*1000;
+    return {startAt:primary.startAt-offset,endAt:primary.endAt-offset};
+  }
+  if(compareMode==="year_ago") {
+    const start=new Date(primary.startAt);start.setFullYear(start.getFullYear()-1);
+    const end=new Date(primary.endAt);end.setFullYear(end.getFullYear()-1);
+    return {startAt:start.getTime(),endAt:end.getTime()};
+  }
+  // previous (default)
+  return {startAt:primary.startAt-duration,endAt:primary.startAt};
+}
+
+function getTimeUnit(rangeId) {
+  if(rangeId==="24h") return "hour";
+  return "day";
+}
+
+function getCompareLabel(rangeId,compareMode) {
+  if(rangeId==="all"||compareMode==="none") return null;
+  const map={previous:"previous period",week_ago:"same period last week",year_ago:"same period last year"};
+  return map[compareMode]||"previous period";
+}
+
+// ─── Umami API Layer ─────────────────────────────────────────────────────────
+async function umamiFetch(path,apiKey,region){
+  const res=await fetch(`/api/umami?path=${encodeURIComponent(path)}${region?`&region=${region}`:""}`,{headers:{"Accept":"application/json"}});
+  if(!res.ok) throw new Error(`Umami ${path}: ${res.status}`);return res.json();
+}
+function qs(params){return Object.entries(params).filter(([,v])=>v!=null).map(([k,v])=>`${k}=${encodeURIComponent(v)}`).join("&");}
+
+// ─── Data Fetching Hook ──────────────────────────────────────────────────────
+function useAnalyticsData(cfg,site,rangeId,compareMode) {
+  const [data,setData]=useState(null);
+  const [loading,setLoading]=useState(!!cfg&&!!site);
+  const [error,setError]=useState(null);
+  const fetchAll=useCallback(async()=>{
+    if(!cfg||!site)return;
+    setLoading(true);setError(null);
+    const{key,region,seoKey}=cfg;
+    const tz=Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const id=site.id;
+    const primary=getRange(rangeId);
+    const comparison=getComparisonRange(rangeId,compareMode);
+    const unit=getTimeUnit(rangeId);
+    try{
+      const batch1=await Promise.all([
+        umamiFetch(`/websites/${id}/stats?${qs(primary)}`,key,region),
+        comparison?umamiFetch(`/websites/${id}/stats?${qs(comparison)}`,key,region):Promise.resolve({pageviews:0,visitors:0,visits:0,bounces:0,totaltime:0}),
+        umamiFetch(`/websites/${id}/active`,key,region),
+        umamiFetch(`/websites/${id}/pageviews?${qs({...primary,unit,timezone:tz})}`,key,region),
+      ]);
+      await sleep(400);
+      const[statsToday,statsYesterday,active,timeSeries]=batch1;
+      const batch2=await Promise.all([
+        umamiFetch(`/websites/${id}/metrics?${qs({...primary,type:"path",limit:10})}`,key,region),
+        umamiFetch(`/websites/${id}/metrics?${qs({...primary,type:"referrer",limit:10})}`,key,region),
+        umamiFetch(`/websites/${id}/metrics?${qs({...primary,type:"country",limit:10})}`,key,region),
+      ]);
+      await sleep(400);
+      const[pages,referrers,countries]=batch2;
+      const batch3=await Promise.all([
+        umamiFetch(`/websites/${id}/metrics?${qs({...primary,type:"browser",limit:10})}`,key,region),
+        umamiFetch(`/websites/${id}/metrics?${qs({...primary,type:"device",limit:10})}`,key,region),
+        umamiFetch(`/websites/${id}/metrics?${qs({...primary,type:"os",limit:10})}`,key,region),
+        umamiFetch(`/websites/${id}/metrics?${qs({...primary,type:"event",limit:10})}`,key,region),
+      ]);
+      await sleep(400);
+      const[browsers,devices,os,events]=batch3;
+      const batch4=await Promise.all([
+        umamiFetch(`/websites/${id}/events/series?${qs({...primary,unit,timezone:tz})}`,key,region),
+        umamiFetch(`/websites/${id}/metrics?${qs({...primary,type:"channel",limit:10})}`,key,region),
+      ]);
+      const[eventSeries,channels]=batch4;
+      const fmtLabel=(x)=>{const d=new Date(x);return unit==="hour"?d.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit",hour12:false}):d.toLocaleDateString([],{weekday:"short",month:"short",day:"numeric"});};
+      const timeData=(timeSeries.pageviews||[]).map((pv,i)=>({label:fmtLabel(pv.x),pageviews:pv.y,sessions:timeSeries.sessions?.[i]?.y||0}));
+      const fmtM=(arr)=>(arr||[]).map(m=>({name:m.x,value:m.y}));
+      const eventsByHour={};const eventNames=new Set();
+      (eventSeries||[]).forEach(e=>{const h=fmtLabel(e.t);if(!eventsByHour[h])eventsByHour[h]={label:h};eventsByHour[h][e.x]=(eventsByHour[h][e.x]||0)+e.y;eventNames.add(e.x);});
+      let pageSpeed=null;
+      try{const psiRes=await fetch(`https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=https://${site.domain}&category=performance&category=seo&category=accessibility`);
+        if(psiRes.ok){const psi=await psiRes.json();const cats=psi.lighthouseResult?.categories||{};const a=psi.lighthouseResult?.audits||{};
+          pageSpeed={performance:Math.round((cats.performance?.score||0)*100),seo:Math.round((cats.seo?.score||0)*100),accessibility:Math.round((cats.accessibility?.score||0)*100),
+            vitals:{LCP:{value:a["largest-contentful-paint"]?.displayValue||"—",rating:a["largest-contentful-paint"]?.score>=0.9?"good":a["largest-contentful-paint"]?.score>=0.5?"needs-improvement":"poor"},
+              FCP:{value:a["first-contentful-paint"]?.displayValue||"—",rating:a["first-contentful-paint"]?.score>=0.9?"good":a["first-contentful-paint"]?.score>=0.5?"needs-improvement":"poor"},
+              CLS:{value:a["cumulative-layout-shift"]?.displayValue||"—",rating:a["cumulative-layout-shift"]?.score>=0.9?"good":a["cumulative-layout-shift"]?.score>=0.5?"needs-improvement":"poor"},
+              TTFB:{value:a["server-response-time"]?.displayValue||"—",rating:a["server-response-time"]?.score>=0.9?"good":a["server-response-time"]?.score>=0.5?"needs-improvement":"poor"}}};}}catch(e){}
+      let seoAudit=null;
+      try{const sR=await fetch(`/api/seo?domain=${encodeURIComponent(site.domain)}`);if(sR.ok)seoAudit=await sR.json();}catch(e){}
+      setData({statsToday,statsYesterday,active:active.visitors||0,timeSeries:timeData,unit,
+        pages:fmtM(pages),referrers:fmtM(referrers),countries:fmtM(countries).map(c=>({...c,code:c.name.length===2?c.name:""})),
+        browsers:fmtM(browsers),devices:fmtM(devices),os:fmtM(os),events:fmtM(events),
+        eventSeries:Object.values(eventsByHour).sort((a,b)=>a.label.localeCompare(b.label)),topEventNames:[...eventNames].slice(0,5),
+        channels:fmtM(channels),pageSpeed,seoAudit});
+    }catch(e){setError(e.message);}finally{setLoading(false);}
+  },[cfg,site,rangeId,compareMode]);
+  useEffect(()=>{fetchAll();},[fetchAll]);
+  return{data,loading,error,refresh:fetchAll};
+}
+
+// ─── Shared UI Components ────────────────────────────────────────────────────
+const Tip=({active,payload,label})=>{if(!active||!payload?.length)return null;return (<div style={{background:"#1A1F25",border:`1px solid ${C.border}`,borderRadius:8,padding:"10px 14px",fontSize:12,fontFamily:mono}}><div style={{color:C.muted,marginBottom:6}}>{label}</div>{payload.map((p,i)=>(<div key={i} style={{color:p.color,marginBottom:2}}>{p.name}: {fmt(p.value)}</div>))}</div>);};
+const Dot=({color})=><span style={{display:"inline-block",width:8,height:8,borderRadius:"50%",background:color,marginRight:6,verticalAlign:"middle"}}/>;
+const Heading=({children,desc})=>(<div style={{marginBottom:16,marginTop:8}}><div style={{fontSize:14,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.08em"}}>{children}</div>{desc&&<div style={{fontSize:12,color:C.dim,marginTop:6,lineHeight:1.5,fontWeight:400,textTransform:"none",letterSpacing:"normal"}}>{desc}</div>}</div>);
+
+const BTable=({title,data})=>{const mx=data?.length?Math.max(...data.map(d=>d.value)):1;
+  if(!data?.length)return (<div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"16px 18px"}}><div style={{fontSize:12,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:14}}>{title}</div><div style={{fontSize:12,color:C.dim,padding:"12px 0"}}>No data yet</div></div>);
+  return (<div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"16px 18px"}}><div style={{fontSize:12,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:14}}>{title}</div>{data.map((d,i)=>(<div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 0",borderBottom:"1px solid rgba(200,205,211,0.04)",position:"relative"}}><div style={{position:"absolute",left:0,top:0,bottom:0,width:`${(d.value/mx)*100}%`,background:C.accentSoft,borderRadius:4}}/><span style={{color:C.text,fontFamily:mono,fontSize:12,zIndex:1,maxWidth:"70%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.name}</span><span style={{color:C.muted,fontFamily:mono,fontSize:12,fontWeight:500,zIndex:1}}>{fmt(d.value)}</span></div>))}</div>);};
+
+const KPI=({label,value,prev,suffix,invertDelta,sub,showDelta=true,compareLabel})=>{const d=pctD(parseFloat(value),parseFloat(prev));const up=invertDelta?!d.up:d.up;return (<div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"20px 22px"}}><div style={{fontSize:12,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em",fontWeight:500,marginBottom:8}}>{label}</div><div style={{fontSize:28,fontWeight:700,color:C.bright,fontFamily:mono,letterSpacing:"-0.03em",lineHeight:1}}>{typeof value==="number"?fmt(value):value}{suffix&&<span style={{fontSize:16,color:C.muted,marginLeft:2}}>{suffix}</span>}</div>{showDelta&&<div style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:12,fontWeight:500,fontFamily:mono,color:up?C.green:C.red,marginTop:10,padding:"3px 8px",background:up?C.greenSoft:C.redSoft,borderRadius:6}} title={compareLabel?`vs ${compareLabel}`:""}><span>{up?"↑":"↓"}</span><span>{d.v}%</span></div>}{sub&&<div style={{fontSize:11,color:C.dim,marginTop:8,fontFamily:mono}}>{sub}</div>}{showDelta&&compareLabel&&<div style={{fontSize:10,color:C.dim,marginTop:6,fontFamily:mono}}>vs {compareLabel}</div>}</div>);};
+
+// ─── Date Range Selector ─────────────────────────────────────────────────────
+const DateRangeSelector=({value,onChange})=>(<div style={{display:"flex",gap:4,flexWrap:"wrap"}}>{DATE_RANGES.map(r=>(<button key={r.id} onClick={()=>onChange(r.id)} style={{padding:"6px 14px",fontSize:12,fontFamily:font,fontWeight:value===r.id?600:400,color:value===r.id?C.bg:C.muted,background:value===r.id?C.accent:"rgba(200,205,211,0.04)",border:value===r.id?"none":`1px solid ${C.border}`,borderRadius:6,cursor:"pointer",transition:"all 0.15s"}}>{r.label}</button>))}</div>);
+
+const CompareSelector=({value,onChange,rangeId})=>{
+  const [open,setOpen]=useState(false);
+  const allDisabled=rangeId==="all";
+  const current=COMPARE_MODES.find(m=>m.id===value)||COMPARE_MODES[0];
+  return (<div style={{position:"relative",display:"inline-block"}}>
+    <button onClick={()=>!allDisabled&&setOpen(!open)} disabled={allDisabled} style={{padding:"6px 12px",fontSize:11,fontFamily:mono,color:allDisabled?C.dim:C.muted,background:"rgba(200,205,211,0.04)",border:`1px solid ${C.border}`,borderRadius:6,cursor:allDisabled?"not-allowed":"pointer",display:"flex",alignItems:"center",gap:6,opacity:allDisabled?0.5:1}}>
+      <span style={{color:C.dim}}>vs</span>
+      <span>{allDisabled?"N/A":current.label}</span>
+      {!allDisabled&&<span style={{color:C.dim,fontSize:8}}>▼</span>}
+    </button>
+    {open&&!allDisabled&&(<div style={{position:"absolute",top:"100%",right:0,marginTop:4,background:"#1A1F25",border:`1px solid ${C.border}`,borderRadius:8,padding:4,minWidth:200,zIndex:30,boxShadow:"0 8px 24px rgba(0,0,0,0.4)"}}>
+      {COMPARE_MODES.map(m=>(<button key={m.id} onClick={()=>{onChange(m.id);setOpen(false);}} style={{display:"block",width:"100%",textAlign:"left",padding:"8px 12px",fontSize:12,fontFamily:font,color:value===m.id?C.accent:C.text,background:value===m.id?C.accentSoft:"transparent",border:"none",borderRadius:5,cursor:"pointer"}}>{m.label}</button>))}
+    </div>)}
+  </div>);
+};
+
+const StickyRangeBar=({rangeId,onRangeChange,compareMode,onCompareChange,onRefresh,lastUpdated,refreshing})=>{
+  const ago=lastUpdated?Math.round((Date.now()-lastUpdated)/1000):0;
+  const agoLabel=ago<60?`${ago}s ago`:ago<3600?`${Math.round(ago/60)}m ago`:ago<86400?`${Math.round(ago/3600)}h ago`:`${Math.round(ago/86400)}d ago`;
+  return (<div style={{position:"sticky",top:62,zIndex:30,marginBottom:24,background:"rgba(11,14,17,0.92)",backdropFilter:"blur(8px)",borderTop:`1px solid ${C.border}`,borderBottom:`1px solid ${C.border}`,padding:"12px 0",margin:"0 -28px 24px"}}>
+    <div style={{maxWidth:1224,margin:"0 auto",padding:"0 28px",display:"flex",alignItems:"center",gap:12,flexWrap:"wrap",justifyContent:"space-between"}}>
+      <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+        <span style={{fontSize:10,fontFamily:mono,fontWeight:600,color:C.dim,textTransform:"uppercase",letterSpacing:"0.06em"}}>Showing</span>
+        <DateRangeSelector value={rangeId} onChange={onRangeChange}/>
+        <CompareSelector value={compareMode} onChange={onCompareChange} rangeId={rangeId}/>
+      </div>
+      <div style={{display:"flex",alignItems:"center",gap:10}}>
+        {lastUpdated&&<span style={{fontSize:11,fontFamily:mono,color:C.dim}}>Updated {agoLabel}</span>}
+        <button onClick={onRefresh} disabled={refreshing} style={{padding:"6px 14px",fontSize:12,fontFamily:font,color:refreshing?C.dim:C.muted,background:"rgba(200,205,211,0.04)",border:`1px solid ${C.border}`,borderRadius:6,cursor:refreshing?"not-allowed":"pointer",display:"flex",alignItems:"center",gap:6}}>
+          <span style={{display:"inline-block",animation:refreshing?"spin 1s linear infinite":"none"}}>↻</span>
+          {refreshing?"Refreshing":"Refresh"}
+        </button>
+      </div>
+    </div>
+  </div>);
+};
+
+// ─── GeoChart ────────────────────────────────────────────────────────────────
+const GeoChart=({data})=>{const total=data.reduce((s,d)=>s+d.value,0);const[hov,setHov]=useState(null);if(!data.length)return null;return (<div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"22px 24px",marginBottom:24}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}><div style={{fontSize:13,fontWeight:600,color:C.muted}}>Traffic by Location</div><div style={{fontSize:12,fontFamily:mono,color:C.dim}}>{total.toLocaleString()} visitors</div></div><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(280px, 1fr))",gap:"2px 24px"}}>{data.map((d,i)=>{const pct=((d.value/total)*100).toFixed(1);return (<div key={i} onMouseEnter={()=>setHov(i)} onMouseLeave={()=>setHov(null)} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 6px",borderRadius:6,background:hov===i?"rgba(217,170,90,0.04)":"transparent",transition:"background 0.15s",cursor:"default"}}><span style={{fontSize:18,width:26,textAlign:"center",lineHeight:1}}>{toFlag(d.code)}</span><span style={{flex:1,fontSize:13,color:C.text,fontWeight:500}}>{d.name}</span><div style={{width:80,height:6,background:"rgba(200,205,211,0.06)",borderRadius:3,overflow:"hidden"}}><div style={{width:`${pct}%`,height:"100%",background:GEO[i]||C.dim,borderRadius:3}}/></div><span style={{fontFamily:mono,fontSize:12,color:C.muted,width:44,textAlign:"right"}}>{fmt(d.value)}</span><span style={{fontFamily:mono,fontSize:11,color:C.dim,width:42,textAlign:"right"}}>{pct}%</span></div>);})}</div></div>);};
+
+// ─── Site Health ─────────────────────────────────────────────────────────────
+const RATING_COLOR={good:C.green,"needs-improvement":C.accent,poor:C.red};
+const ScoreRing=({score,label,size=72})=>{const r=(size-8)/2,circ=2*Math.PI*r,offset=circ-(score/100)*circ;const c=score>=90?C.green:score>=50?C.accent:C.red;return (<div style={{textAlign:"center"}}><svg width={size} height={size} style={{transform:"rotate(-90deg)"}}><circle cx={size/2} cy={size/2} r={r} fill="none" stroke="rgba(200,205,211,0.06)" strokeWidth={5}/><circle cx={size/2} cy={size/2} r={r} fill="none" stroke={c} strokeWidth={5} strokeDasharray={circ} strokeDashoffset={offset} strokeLinecap="round" style={{transition:"stroke-dashoffset 0.8s ease"}}/></svg><div style={{marginTop:-size+8,height:size-8,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:20,fontWeight:700,fontFamily:mono,color:C.bright}}>{score}</span></div><div style={{fontSize:10,color:C.muted,marginTop:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>{label}</div></div>);};
+const SiteHealth=({pagespeed,seoscore})=>{if(!pagespeed&&!seoscore)return null;return (<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(320px, 1fr))",gap:16,marginBottom:24}}>
+  {pagespeed&&(<div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"20px 22px"}}><div style={{fontSize:12,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:18}}>PageSpeed Insights</div><div style={{display:"flex",justifyContent:"space-around",marginBottom:20}}><ScoreRing score={pagespeed.performance} label="Performance"/><ScoreRing score={pagespeed.seo} label="SEO"/><ScoreRing score={pagespeed.accessibility} label="A11y"/></div><div style={{fontSize:11,fontWeight:600,color:C.dim,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:10}}>Core Web Vitals</div><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(80px, 1fr))",gap:8}}>{Object.entries(pagespeed.vitals).map(([k,v])=>(<div key={k} style={{background:"rgba(200,205,211,0.04)",borderRadius:6,padding:"8px 10px",textAlign:"center"}}><div style={{fontSize:10,color:C.dim,fontFamily:mono,marginBottom:4}}>{k}</div><div style={{fontSize:14,fontWeight:600,fontFamily:mono,color:RATING_COLOR[v.rating]||C.text}}>{v.value}</div></div>))}</div></div>)}
+  {seoscore&&(<div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"20px 22px"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}><div style={{fontSize:12,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em"}}>SEO Audit</div><div style={{display:"flex",alignItems:"center",gap:8}}><span style={{fontSize:28,fontWeight:700,fontFamily:mono,color:C.bright}}>{seoscore.score}</span>{seoscore.grade&&<span style={{fontSize:14,fontWeight:700,fontFamily:mono,padding:"2px 8px",borderRadius:4,background:seoscore.score>=80?C.greenSoft:C.accentSoft,color:seoscore.score>=80?C.green:C.accent}}>{seoscore.grade}</span>}</div></div>
+    <div style={{fontSize:12,color:C.text,lineHeight:1.6,marginBottom:16,padding:"12px 14px",background:"rgba(200,205,211,0.03)",borderRadius:8,borderLeft:`2px solid ${seoscore.score>=80?C.green:C.accent}`}}>{seoscore.score>=90?"Excellent. SEO best practices across the board.":seoscore.score>=80?"Good. Minor issues, solid foundation.":seoscore.score>=60?`Needs work. Scoring ${seoscore.score}/100 means search engines are missing key signals. Fix the issues below to improve.`:`Critical. Score of ${seoscore.score}/100 means significant problems hurting rankings.`}</div>
+    {seoscore.priorities?.length>0&&(<>{seoscore.priorities.slice(0,4).map((p,i)=>(<div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 0",borderBottom:i<3?"1px solid rgba(200,205,211,0.04)":"none"}}><span style={{fontSize:8,color:p.severity==="warning"?C.accent:C.blue}}>●</span><span style={{fontSize:12,color:C.text}}>{p.issue}</span></div>))}</>)}</div>)}
+</div>);};
+
+// ─── AI Insights Engine ──────────────────────────────────────────────────────
+function buildPayload(data){const t=data.statsToday,y=data.statsYesterday;return JSON.stringify({today:{...t,bounceRate:t.visits?((t.bounces/t.visits)*100).toFixed(1)+"%":"0%",avgDuration:durFmt(t.totaltime,t.visits)},yesterday:{...y,bounceRate:y.visits?((y.bounces/y.visits)*100).toFixed(1)+"%":"0%",avgDuration:durFmt(y.totaltime,y.visits)},timeSeries:data.timeSeries,topPages:data.pages,referrers:data.referrers,countries:data.countries,browsers:data.browsers,devices:data.devices,os:data.os,events:data.events,channels:data.channels,activeVisitors:data.active,pageSpeed:data.pageSpeed||null,seoAudit:data.seoAudit?{score:data.seoAudit.score,grade:data.seoAudit.grade,priorities:data.seoAudit.priorities?.slice(0,5)}:null},null,2);}
+
+const SYS_PROMPT=`You are a senior web analytics and SEO consultant. Analyze the JSON analytics snapshot and respond ONLY with valid JSON (no markdown, no backticks):
+{"trends":[{"title":"Short title","description":"1-2 sentence explanation.","severity":"info|positive|warning|critical","dataPoints":["stat 1","stat 2"]}],
+"suggestions":[{"title":"Action title","channel":"Content/SEO|Paid Ads|Social Media|Email","linkedTrend":"trend title","action":"Concrete next step.","impact":"low|medium|high"}]}
+Rules:
+- 3-5 trends. Look for: traffic patterns, geographic shifts, referrer concentration, bounce rates, device shifts, event changes, UTM gaps, Core Web Vitals issues, SEO audit failures.
+- 3-4 suggestions across a MIX of channels. Each links to a trend.
+- Be data-driven. Reference actual numbers. Keep it concise.
+- Return raw JSON only.`;
+
+async function callLLM(systemPrompt,userMessage,maxTokens=4096){
+  // Production: Vercel proxy (server holds the key)
+  const res=await fetch("/api/groq",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({system:systemPrompt,user:userMessage,max_tokens:maxTokens})});
+  if(!res.ok){const e=await res.text().catch(()=>"");throw new Error(`API error ${res.status}: ${e.slice(0,200)}`);}
+  const d=await res.json();return (d.text||"").replace(/```json|```/g,"").trim();
+}
+
+async function analyzeWithAI(payload,userContext){const sysPrompt=SYS_PROMPT+(userContext||"");const txt=await callLLM(sysPrompt,`Analytics data:\n\n${payload}`);
+  try{return JSON.parse(txt);}catch(e){const tm=txt.match(/"trends"\s*:\s*\[([\s\S]*?)\]/);const sm=txt.match(/"suggestions"\s*:\s*\[([\s\S]*?)\]/);
+    const safe=(s)=>{if(!s)return[];try{return JSON.parse(`[${s}]`);}catch{const lb=s.lastIndexOf("}");if(lb>0)try{return JSON.parse(`[${s.slice(0,lb+1)}]`);}catch{return[];}return[];}};
+    const trends=safe(tm?.[1]),suggestions=safe(sm?.[1]);if(trends.length||suggestions.length)return{trends,suggestions};throw new Error("Parse failed. Retry.");}}
+
+const SEVERITY_COLORS={info:C.blue,positive:C.green,warning:C.accent,critical:C.red};
+const SEVERITY_BG={info:"rgba(90,184,217,0.06)",positive:"rgba(52,211,153,0.06)",warning:"rgba(217,170,90,0.06)",critical:"rgba(248,113,113,0.06)"};
+const CHANNEL_COLORS={"Content/SEO":"#8CD95A","Paid Ads":"#F87171","Social Media":"#5AB8D9","Email":"#B05AD9"};
+const IMPACT_COLORS={low:C.dim,medium:C.accent,high:C.green};
+
+const TrendCard=({trend,index,analyticsData,contextFiles})=>{
+  const sev=trend.severity||"info";
+  const[expanded,setExpanded]=useState(false);
+  const[context,setContext]=useState(null);
+  const[loading,setLoading]=useState(false);
+  const[error,setError]=useState("");
+
+  const fetchContext=async()=>{
+    if(context){setExpanded(!expanded);return;}
+    setExpanded(true);setLoading(true);setError("");
+    try{
+      const dataSnapshot=analyticsData?JSON.stringify({
+        today:analyticsData.statsToday,yesterday:analyticsData.statsYesterday,
+        topPages:(analyticsData.pages||[]).slice(0,5),topReferrers:(analyticsData.referrers||[]).slice(0,5),
+        topCountries:(analyticsData.countries||[]).slice(0,5),pageSpeed:analyticsData.pageSpeed,
+        seoAudit:analyticsData.seoAudit?{score:analyticsData.seoAudit.score,grade:analyticsData.seoAudit.grade,priorities:analyticsData.seoAudit.priorities?.slice(0,5)}:null,
+      },null,2):"";
+      const userCtx=buildContextString(contextFiles);
+      const sysPrompt=`You are a senior web analytics consultant. Given a specific trend or anomaly identified in a user's analytics data, provide a detailed explanation and actionable steps. Respond ONLY with valid JSON (no markdown):
+{
+  "explanation": "2-3 sentence detailed explanation of what this means and why it matters. Reference specific numbers from the data.",
+  "implications": ["short bullet point 1", "short bullet point 2", "short bullet point 3"],
+  "actions": [
+    {"title": "Action 1", "description": "Concrete step with specifics. 1-2 sentences."},
+    {"title": "Action 2", "description": "Another step."},
+    {"title": "Action 3", "description": "Optional third step."}
+  ],
+  "priority": "low|medium|high",
+  "timeframe": "e.g., 'This week', 'Within 30 days', 'Next quarter'"
+}
+Be specific. Reference real numbers from the data when possible. Do not be generic. Make actions concrete enough to start today.${userCtx}`;
+      const userPrompt=`TREND: ${trend.title}\nSEVERITY: ${sev}\nDESCRIPTION: ${trend.description}\nDATA POINTS: ${(trend.dataPoints||[]).join("; ")}\n\nFULL ANALYTICS SNAPSHOT:\n${dataSnapshot}`;
+      const txt=await callLLM(sysPrompt,userPrompt,2048);
+      const parsed=JSON.parse(txt);
+      setContext(parsed);
+    }catch(e){setError(e.message||"Failed to load context");}finally{setLoading(false);}
+  };
+
+  return (<div style={{background:SEVERITY_BG[sev],border:`1px solid ${C.border}`,borderLeft:`3px solid ${SEVERITY_COLORS[sev]}`,borderRadius:"4px 12px 12px 4px",padding:"18px 22px",animation:`fadeIn 0.4s ease-out ${index*0.08}s both`}}>
+    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
+      <span style={{fontSize:15,fontWeight:600,color:C.bright,flex:1}}>{trend.title}</span>
+      <span style={{fontSize:10,fontFamily:mono,fontWeight:600,color:SEVERITY_COLORS[sev],textTransform:"uppercase",letterSpacing:"0.08em",padding:"3px 8px",background:"rgba(0,0,0,0.2)",borderRadius:4}}>{sev}</span>
+    </div>
+    <div style={{fontSize:13,color:C.text,lineHeight:1.6,marginBottom:10}}>{trend.description}</div>
+    {trend.dataPoints?.length>0&&(<div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:12}}>{trend.dataPoints.map((dp,i)=>(<span key={i} style={{fontSize:11,fontFamily:mono,color:C.muted,padding:"3px 10px",background:"rgba(200,205,211,0.06)",borderRadius:4}}>{dp}</span>))}</div>)}
+    <button onClick={fetchContext} style={{fontSize:11,fontFamily:mono,color:expanded?C.dim:SEVERITY_COLORS[sev],background:"none",border:`1px solid ${expanded?C.border:`${SEVERITY_COLORS[sev]}40`}`,borderRadius:6,padding:"5px 12px",cursor:"pointer",transition:"all 0.15s"}}>
+      {loading?"Loading...":expanded?"Hide context ↑":context?"Show context ↓":"Provide more context →"}
+    </button>
+    {expanded&&(<div style={{marginTop:14,paddingTop:14,borderTop:`1px solid ${C.border}`,animation:"fadeIn 0.3s ease-out"}}>
+      {loading&&<div style={{display:"flex",alignItems:"center",gap:8,fontSize:12,color:C.muted}}>{[0,1,2].map(i=>(<div key={i} style={{width:5,height:5,borderRadius:"50%",background:SEVERITY_COLORS[sev],animation:`pulse 1.2s ease-in-out ${i*0.2}s infinite`}}/>))}<span>Analyzing in detail...</span></div>}
+      {error&&<div style={{fontSize:12,color:C.red,padding:"8px 12px",background:C.redSoft,borderRadius:6}}>{error} <button onClick={fetchContext} style={{color:C.red,background:"none",border:"none",cursor:"pointer",textDecoration:"underline",fontSize:12}}>Retry</button></div>}
+      {context&&(<div>
+        {/* Priority + timeframe */}
+        <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
+          {context.priority&&<span style={{fontSize:10,fontFamily:mono,fontWeight:600,color:IMPACT_COLORS[context.priority]||C.muted,textTransform:"uppercase",letterSpacing:"0.06em",padding:"3px 8px",background:`${IMPACT_COLORS[context.priority]||C.dim}15`,border:`1px solid ${IMPACT_COLORS[context.priority]||C.dim}30`,borderRadius:4}}>{context.priority} priority</span>}
+          {context.timeframe&&<span style={{fontSize:10,fontFamily:mono,color:C.muted,padding:"3px 8px",background:"rgba(200,205,211,0.04)",borderRadius:4}}>⏱ {context.timeframe}</span>}
+        </div>
+        {/* Explanation */}
+        {context.explanation&&<div style={{fontSize:13,color:C.text,lineHeight:1.65,marginBottom:14}}>{context.explanation}</div>}
+        {/* Implications */}
+        {context.implications?.length>0&&(<div style={{marginBottom:14}}>
+          <div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>What this means</div>
+          {context.implications.map((imp,i)=>(<div key={i} style={{display:"flex",gap:8,fontSize:12,color:C.text,lineHeight:1.55,marginBottom:4}}><span style={{color:SEVERITY_COLORS[sev],flexShrink:0}}>•</span><span>{imp}</span></div>))}
+        </div>)}
+        {/* Actions */}
+        {context.actions?.length>0&&(<div>
+          <div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8}}>Recommended actions</div>
+          {context.actions.map((a,i)=>(<div key={i} style={{display:"flex",gap:10,marginBottom:10,padding:"10px 12px",background:"rgba(0,0,0,0.15)",borderRadius:8,borderLeft:`2px solid ${SEVERITY_COLORS[sev]}40`}}>
+            <span style={{fontSize:11,fontFamily:mono,fontWeight:700,color:SEVERITY_COLORS[sev],flexShrink:0,minWidth:18}}>{i+1}.</span>
+            <div><div style={{fontSize:13,fontWeight:600,color:C.bright,marginBottom:3}}>{a.title}</div><div style={{fontSize:12,color:C.text,lineHeight:1.55}}>{a.description}</div></div>
+          </div>))}
+        </div>)}
+      </div>)}
+    </div>)}
+  </div>);
+};
+const SuggestionCard=({sug,index})=>{const ch=CHANNEL_COLORS[sug.channel]||C.muted;return (<div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"18px 22px",animation:`fadeIn 0.4s ease-out ${index*0.08}s both`}}><div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10,flexWrap:"wrap"}}><span style={{fontSize:10,fontWeight:600,fontFamily:mono,color:ch,textTransform:"uppercase",letterSpacing:"0.06em",padding:"3px 10px",background:`${ch}15`,border:`1px solid ${ch}30`,borderRadius:4}}>{sug.channel}</span><span style={{fontSize:10,fontWeight:600,fontFamily:mono,color:IMPACT_COLORS[sug.impact]||C.dim,textTransform:"uppercase",letterSpacing:"0.06em",padding:"3px 8px",background:`${(IMPACT_COLORS[sug.impact]||C.dim)}15`,borderRadius:4}}>{sug.impact} impact</span></div><div style={{fontSize:15,fontWeight:600,color:C.bright,marginBottom:6}}>{sug.title}</div>{sug.linkedTrend&&<div style={{fontSize:11,color:C.dim,fontFamily:mono,marginBottom:10}}>Re: {sug.linkedTrend}</div>}<div style={{fontSize:13,color:C.text,lineHeight:1.65}}>{sug.action}</div></div>);};
+
+const AIInsights=({analyticsData,contextFiles})=>{
+  const[state,setState]=useState("idle");const[results,setResults]=useState(null);const[error,setError]=useState("");
+  const[aiRangeId,setAiRangeId]=useState("24h");
+  const MSGS=["Scanning traffic patterns...","Comparing metrics...","Evaluating geographic distribution...","Analyzing campaigns...","Reviewing SEO health...","Preparing suggestions..."];const[msgIdx,setMsgIdx]=useState(0);
+  const run=async()=>{setState("loading");setMsgIdx(0);setError("");const iv=setInterval(()=>setMsgIdx(i=>(i+1)%MSGS.length),2200);
+    try{
+      const rangeLabel=DATE_RANGES.find(r=>r.id===aiRangeId)?.label||"Last 24h";
+      const p=`ANALYSIS PERIOD: ${rangeLabel}\n\n${buildPayload(analyticsData)}`;
+      const userCtx=buildContextString(contextFiles);
+      const r=await analyzeWithAI(p,userCtx);setResults(r);setState("done");
+    }catch(e){setError(e.message);setState("error");}finally{clearInterval(iv);}
+  };
+  return (<><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,marginTop:8,flexWrap:"wrap",gap:12}}>
+    <Heading desc="AI analyzes your traffic, SEO, and performance data to surface patterns and issues."><span style={{marginRight:8}}>✦</span>Trends & Anomalies</Heading>
+    <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+      <DateRangeSelector value={aiRangeId} onChange={(r)=>{setAiRangeId(r);if(state==="done")setState("idle");}}/>
+      {state!=="loading"&&<button onClick={run} style={{background:state==="done"?"rgba(200,205,211,0.06)":`linear-gradient(135deg,${C.accent},#E8C06A)`,border:state==="done"?`1px solid ${C.border}`:"none",borderRadius:10,padding:"10px 24px",fontSize:14,fontWeight:600,fontFamily:font,cursor:"pointer",color:state==="done"?C.muted:C.bg,transition:"all 0.2s"}}>{state==="done"?"Re-analyze":state==="error"?"Retry":"Analyze"}</button>}
+    </div>
+  </div>
+    {state==="idle"&&<div style={{background:C.surface,border:`1px dashed ${C.border}`,borderRadius:12,padding:"40px 24px",textAlign:"center",marginBottom:32}}><div style={{fontSize:32,marginBottom:12,opacity:0.4}}>✦</div><div style={{fontSize:14,color:C.muted,marginBottom:6}}>AI analysis ready</div><div style={{fontSize:12,color:C.dim,lineHeight:1.5}}>Analyzing {DATE_RANGES.find(r=>r.id===aiRangeId)?.label||"Last 24h"} · Click Analyze to identify trends.</div></div>}
+    {state==="loading"&&<div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"40px 24px",textAlign:"center",marginBottom:32}}><div style={{display:"flex",justifyContent:"center",gap:6,marginBottom:18}}>{[0,1,2].map(i=>(<div key={i} style={{width:8,height:8,borderRadius:"50%",background:C.accent,animation:`pulse 1.2s ease-in-out ${i*0.2}s infinite`}}/>))}</div><div style={{fontSize:13,color:C.text,fontWeight:500,marginBottom:4}}>{MSGS[msgIdx]}</div><div style={{fontSize:11,color:C.dim}}>5-10 seconds</div></div>}
+    {state==="error"&&<div style={{background:C.redSoft,border:"1px solid rgba(248,113,113,0.15)",borderRadius:12,padding:"20px 24px",marginBottom:32}}><div style={{fontSize:14,color:C.red,fontWeight:600,marginBottom:4}}>Analysis failed</div><div style={{fontSize:12,color:C.text}}>{error}</div></div>}
+    {state==="done"&&results&&(<><div style={{display:"flex",flexDirection:"column",gap:12,marginBottom:32}}>{results.trends?.map((t,i)=><TrendCard key={i} trend={t} index={i} analyticsData={analyticsData} contextFiles={contextFiles}/>)}</div><Heading desc="Actionable next steps across Content/SEO, Paid Ads, Social Media, and Email."><span style={{marginRight:8}}>◎</span>Marketing Suggestions</Heading><div style={{display:"flex",flexDirection:"column",gap:12,marginBottom:32}}>{results.suggestions?.map((s,i)=><SuggestionCard key={i} sug={s} index={i}/>)}</div></>)}
+  </>);
+};
+
+// ─── Dashboard ───────────────────────────────────────────────────────────────
+const Dashboard=({cfg,site,useMock,onSettings,rangeId,onRangeChange,compareMode,onCompareChange,contextFiles})=>{
+  const realData=useAnalyticsData(useMock?null:cfg,useMock?null:site,rangeId,compareMode);
+  const data=useMock?MOCK_DATA:realData.data;
+  const loading=useMock?false:realData.loading;
+  const error=useMock?null:realData.error;
+  const refresh=useMock?()=>{}:realData.refresh;
+  const[lastUpdated,setLastUpdated]=useState(Date.now());
+  const[refreshing,setRefreshing]=useState(false);
+  // Tick every 30s to update "X ago" label
+  const[,setTick]=useState(0);
+  useEffect(()=>{const i=setInterval(()=>setTick(t=>t+1),30000);return ()=>clearInterval(i);},[]);
+  const handleRefresh=async()=>{
+    setRefreshing(true);
+    try{await refresh();}catch(e){}
+    setLastUpdated(Date.now());
+    setTimeout(()=>setRefreshing(false),600);
+  };
+  useEffect(()=>{setLastUpdated(Date.now());},[rangeId,compareMode]);
+
+  if(loading)return (<div style={{maxWidth:1280,margin:"0 auto",padding:"80px 28px",textAlign:"center"}}><div style={{display:"flex",justifyContent:"center",gap:6,marginBottom:18}}>{[0,1,2].map(i=>(<div key={i} style={{width:10,height:10,borderRadius:"50%",background:C.accent,animation:`pulse 1.2s ease-in-out ${i*0.2}s infinite`}}/>))}</div><div style={{fontSize:15,color:C.text,fontWeight:500}}>Loading analytics...</div></div>);
+  if(error)return (<div style={{maxWidth:600,margin:"80px auto",padding:"24px",background:C.redSoft,border:"1px solid rgba(248,113,113,0.15)",borderRadius:12}}><div style={{fontSize:16,color:C.red,fontWeight:600,marginBottom:8}}>Failed to load</div><div style={{fontSize:13,color:C.text,marginBottom:16}}>{error}</div><button onClick={refresh} style={{padding:"8px 20px",background:C.accent,border:"none",borderRadius:8,color:C.bg,fontSize:13,fontWeight:600,cursor:"pointer"}}>Retry</button></div>);
+  if(!data)return null;
+  const t=data.statsToday,y=data.statsYesterday;
+  const bT=t.visits?((t.bounces/t.visits)*100).toFixed(1):"0";
+  const bY=y.visits?((y.bounces/y.visits)*100).toFixed(1):"0";
+  const rangeLabel=DATE_RANGES.find(r=>r.id===rangeId)?.label||"Last 24h";
+  const compareLabel=getCompareLabel(rangeId,compareMode);
+  const showDeltas=compareMode!=="none"&&rangeId!=="all";
+  return (<div style={{maxWidth:1280,margin:"0 auto",padding:"24px 28px"}}>
+    {/* Top header: site name + active visitors */}
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:24,paddingBottom:20,borderBottom:`1px solid ${C.border}`,flexWrap:"wrap",gap:16}}>
+      <div>
+        <h1 style={{fontFamily:font,fontSize:22,fontWeight:600,color:C.bright,letterSpacing:"-0.02em",margin:0}}>{site.name}</h1>
+        <div style={{fontSize:13,color:C.muted,marginTop:4,fontFamily:mono}}>{site.domain}</div>
+      </div>
+      <div style={{display:"flex",alignItems:"center",gap:8,background:C.greenSoft,border:`1px solid ${C.greenBdr}`,borderRadius:8,padding:"6px 14px",fontSize:13,color:C.green,fontWeight:500,fontFamily:mono}}>
+        <span style={{width:7,height:7,background:C.green,borderRadius:"50%",animation:"pulse 2s ease-in-out infinite"}}/>{data.active} active
+      </div>
+    </div>
+    {/* AI Insights — has its own date range internally */}
+    <AIInsights analyticsData={data} contextFiles={contextFiles}/>
+    {/* Site Health */}
+    {(data.pageSpeed||data.seoAudit)&&<><Heading desc="PageSpeed Insights + SEO Score API. Current state, not date-range dependent.">Site Health</Heading><SiteHealth pagespeed={data.pageSpeed} seoscore={data.seoAudit}/></>}
+    {/* Sticky range bar — controls everything below */}
+    <StickyRangeBar rangeId={rangeId} onRangeChange={onRangeChange} compareMode={compareMode} onCompareChange={onCompareChange} onRefresh={handleRefresh} lastUpdated={lastUpdated} refreshing={refreshing}/>
+    {/* KPIs */}
+    <Heading desc={showDeltas?`${rangeLabel} vs ${compareLabel}.`:`${rangeLabel}.`}>At a Glance</Heading>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(200px, 1fr))",gap:16,marginBottom:32}}>
+      <KPI label="Views" value={t.pageviews} prev={y.pageviews} showDelta={showDeltas} compareLabel={compareLabel}/>
+      <KPI label="Visitors" value={t.visitors} prev={y.visitors} showDelta={showDeltas} compareLabel={compareLabel}/>
+      <KPI label="Visits" value={t.visits} prev={y.visits} showDelta={showDeltas} compareLabel={compareLabel}/>
+      <KPI label="Bounce Rate" value={bT} prev={bY} suffix="%" invertDelta sub={`Avg. duration: ${durFmt(t.totaltime,t.visits)}`} showDelta={showDeltas} compareLabel={compareLabel}/>
+    </div>
+    {/* Traffic chart */}
+    {data.timeSeries?.length>0&&<><Heading desc={`${data.unit==="hour"?"Hourly":"Daily"} traffic for ${rangeLabel.toLowerCase()}. Pageviews count every page load (one visitor reading three pages = 3 pageviews). Sessions count visits to your site (one visitor browsing for 20 minutes = 1 session, regardless of pages viewed).`}>Traffic</Heading><div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"20px 16px 12px",marginBottom:24}}><div style={{display:"flex",justifyContent:"flex-end",gap:16,fontSize:11,color:C.muted,fontFamily:mono,marginBottom:12,paddingRight:8}}><span><Dot color={C.accent}/>Pageviews</span><span><Dot color={C.blue}/>Sessions</span></div><ResponsiveContainer width="100%" height={220}><ComposedChart data={data.timeSeries}><defs><linearGradient id="pvG" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={C.accent} stopOpacity={0.15}/><stop offset="100%" stopColor={C.accent} stopOpacity={0}/></linearGradient></defs><CartesianGrid strokeDasharray="3 3" stroke="rgba(200,205,211,0.04)"/><XAxis dataKey="label" tick={{fill:C.dim,fontSize:10,fontFamily:mono}} axisLine={false} tickLine={false}/><YAxis tick={{fill:C.dim,fontSize:10,fontFamily:mono}} axisLine={false} tickLine={false} width={36}/><Tooltip content={<Tip/>}/><Area type="monotone" dataKey="pageviews" stroke={C.accent} strokeWidth={2} fill="url(#pvG)" name="Pageviews"/><Line type="monotone" dataKey="sessions" stroke={C.blue} strokeWidth={1.5} dot={false} name="Sessions"/></ComposedChart></ResponsiveContainer></div></>}
+    {/* Geo */}
+    <Heading desc={`Visitor distribution by country for ${rangeLabel.toLowerCase()}.`}>Where Your Traffic Comes From</Heading><GeoChart data={data.countries}/>
+    {/* Breakdowns */}
+    <Heading desc={`Top pages, referrers, and audience profile for ${rangeLabel.toLowerCase()}.`}>Breakdowns</Heading><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(320px, 1fr))",gap:16,marginBottom:32}}><BTable title="Top Pages" data={data.pages}/><BTable title="Referrers" data={data.referrers}/><BTable title="Browsers" data={data.browsers}/><BTable title="Devices" data={data.devices}/><BTable title="Operating Systems" data={data.os}/></div>
+    {/* Events */}
+    <Heading desc={`Custom events and traffic channels for ${rangeLabel.toLowerCase()}.`}>Events & Channels</Heading><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(320px, 1fr))",gap:16,marginBottom:32}}><BTable title="Top Events" data={data.events}/><BTable title="Channels" data={data.channels}/></div>
+    {/* Footer */}
+    <div style={{textAlign:"center",padding:"24px 0 16px",borderTop:`1px solid ${C.border}`,fontSize:12,color:"#374151",fontFamily:mono}}>Honoroll Dashboard v1.0</div>
+  </div>);
+};
+
+// ─── Content Page ────────────────────────────────────────────────────────────
+function buildMarketingContext(data){const t=data.statsToday,y=data.statsYesterday;const pvD=y.pageviews?(((t.pageviews-y.pageviews)/y.pageviews)*100).toFixed(1):"0";const viD=y.visitors?(((t.visitors-y.visitors)/y.visitors)*100).toFixed(1):"0";const topC=(data.countries||[]).slice(0,5).map(c=>`${c.name}: ${c.value}`).join(", ");const topR=(data.referrers||[]).slice(0,3).map(r=>`${r.name}: ${r.value}`).join(", ");const bR=t.visits?((t.bounces/t.visits)*100).toFixed(1):"0";return{pageviews:t.pageviews,visitors:t.visitors,visits:t.visits,pvDelta:pvD,visDelta:viD,bounceRate:bR,topCountries:topC,topRefs:topR,psiScore:data.pageSpeed?.performance||null,seoScore:data.seoAudit?.score||null,summary:`Today: ${fmt(t.pageviews)} pageviews (${pvD>0?"+":""}${pvD}%), ${fmt(t.visitors)} visitors (${viD>0?"+":""}${viD}%), bounce ${bR}%. Top countries: ${topC}. Top referrers: ${topR}.${data.pageSpeed?` PageSpeed: ${data.pageSpeed.performance}/100.`:""}${data.seoAudit?` SEO: ${data.seoAudit.score}/100.`:""}`};}
+
+const COMPETITOR_CONTEXT=`COMPETITOR STYLE REFERENCE (learn, don't copy):
+LUCK.IO: Bold openers with big numbers, educational threads with metaphors, combative transparency with precise data, uses ALL CAPS strategically. Key: "provably fair","on-chain","self-custodial".
+STAKE.COM: Mass-market, celebrity-driven (Drake), giveaway-heavy, polished high-energy, entertainment over technical. Very high volume.
+SHUFFLE.COM: Token/DeFi language, revenue sharing, hype-driven live events, Web3 vocabulary, community-token oriented.
+WHAT WORKS ON CRYPTO X: Big numbers as hooks, us-vs-them framing, technical credibility, educational content, data-backed transparency.
+HONOROLL: Warmer than Luckio, more substantive than Stake, more grounded than Shuffle. Confident, authentic, builder-mindset. Never promise financial outcomes.`;
+
+// ─── Tone Selector ───────────────────────────────────────────────────────────
+const TONES=[
+  {id:"founder",label:"Founder Voice",desc:"Personal, building in public"},
+  {id:"product",label:"Product Update",desc:"Feature-focused, exciting"},
+  {id:"community",label:"Community",desc:"Celebrating users, growth"},
+  {id:"industry",label:"Industry Commentary",desc:"Thought leadership, insights"},
+  {id:"provocative",label:"Provocative",desc:"Bold claims, challenging norms"},
+];
+
+const ToneSelector=({value,onChange})=>(<div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:20}}>{TONES.map(t=>(<button key={t.id} onClick={()=>onChange(t.id)} style={{padding:"8px 16px",fontSize:12,fontFamily:font,fontWeight:value===t.id?600:400,color:value===t.id?C.bg:C.muted,background:value===t.id?C.accent:"rgba(200,205,211,0.04)",border:value===t.id?"none":`1px solid ${C.border}`,borderRadius:8,cursor:"pointer",transition:"all 0.15s"}} title={t.desc}>{t.label}</button>))}</div>);
+
+const TONE_INSTRUCTIONS={
+  founder:"Write in first person as the founder. Personal, reflective, building-in-public energy. Share genuine lessons and thoughts.",
+  product:"Focus on what the product does and why it matters. Exciting but grounded. Highlight features and benefits.",
+  community:"Celebrate the community and users. Grateful, inclusive tone. Highlight collective growth and milestones.",
+  industry:"Position as a thought leader. Analyze industry trends, challenge conventional wisdom. Insightful and authoritative.",
+  provocative:"Make bold claims. Challenge the status quo. Be edgy but smart. Designed to spark conversation and debate.",
+};
+
+const LENGTH_INSTRUCTIONS={
+  post:{short:"Keep each post SHORT: aim for ~80 characters, punchy one-liners. Maximum 120 characters.",normal:"Each post should be NORMAL length: aim for ~180 characters. Maximum 240 characters.",long:"Each post should be LONG: aim for ~250 characters, use the full available space. Maximum 280 characters."},
+  thread:{short:"Keep the thread SHORT: 3 tweets total. Punchy and tight.",normal:"NORMAL thread length: 4-5 tweets total.",long:"LONG thread: 6-8 tweets total. Develop the narrative deeply."},
+  article:{short:"SHORT article: 300-400 words total. Concise and focused.",normal:"NORMAL article: 500-700 words. Standard long-form depth.",long:"LONG article: 800-1200 words. Deep dive with multiple sections."},
+};
+
+const makePrompt=(base,tone,length,type)=>`${base}\n\nTONE INSTRUCTION: ${TONE_INSTRUCTIONS[tone]||TONE_INSTRUCTIONS.founder}\n\nLENGTH INSTRUCTION: ${LENGTH_INSTRUCTIONS[type]?.[length]||LENGTH_INSTRUCTIONS[type]?.normal||""}`;
+
+const X_POST_PROMPT=`You generate X (Twitter) post drafts for Honoroll. Analytics data and competitor styles are INTERNAL CONTEXT ONLY.
+CRITICAL: NEVER include analytics numbers. No visitor counts, traffic %, pageviews, bounce rates, country data, performance scores. Write about the brand, vision, product, community.
+Write 3 variant posts, DIFFERENT angles. Rules:
+- Each ≤ 280 characters. ZERO analytics numbers. 0-2 emojis max. No hashtag spam.
+- Vary formats: punchy, question, bold claim.
+- NEVER use em dash characters. Use commas, periods, or colons instead.
+- DRAFTS for review.
+- Respond ONLY with valid JSON: {"posts":[{"angle":"2-3 word label","text":"tweet text","chars":280}]}`;
+
+const X_THREAD_PROMPT=`You generate X (Twitter) thread drafts for Honoroll. Analytics and competitor data are INTERNAL CONTEXT ONLY.
+CRITICAL: NEVER include analytics numbers. Write about the brand, product, values, vision, community.
+Write 4-6 tweet thread. Rules:
+- Each ≤ 280 characters. ZERO analytics numbers. Tweet 1 = hook.
+- Build narrative about product/mission/industry.
+- First person, builder energy. End with takeaway/CTA.
+- NEVER use em dash characters. Use commas, periods, or colons instead.
+- DRAFTS for review.
+- Respond ONLY with valid JSON: {"thread":[{"tweet":"tweet text","chars":280}]}`;
+
+const X_ARTICLE_PROMPT=`You write long-form X article drafts for Honoroll. Analytics and competitor data are INTERNAL CONTEXT ONLY.
+CRITICAL: NEVER include analytics numbers. Write about product, vision, industry, why Honoroll matters.
+Write 400-800 word article. Rules:
+- Engaging headline. Hook opening. 2-3 body sections with subheadings. Closing with CTA.
+- ZERO analytics numbers. First person, builder voice.
+- Us-vs-them positioning where natural.
+- NEVER use em dash characters. Use commas, periods, or colons instead.
+- DRAFT for review.
+- Respond ONLY with valid JSON: {"headline":"headline","body":"markdown body (## subheads, **bold**)","wordCount":500}`;
+
+async function generateContent(prompt,context){const txt=await callLLM(prompt,`Context:\n${context}`,2048);try{return JSON.parse(txt);}catch{throw new Error("Parse failed. Retry.");}}
+async function generateArticle(prompt,context){const txt=await callLLM(prompt,`Context:\n${context}`,4096);try{return JSON.parse(txt);}catch{throw new Error("Parse failed. Retry.");}}
+
+// ─── Editable Text ───────────────────────────────────────────────────────────
+const EditableText=({value,onChange,maxChars,style:customStyle})=>{
+  const[editing,setEditing]=useState(false);
+  const[draft,setDraft]=useState(value);
+  const textareaRef=useRef(null);
+  useEffect(()=>{setDraft(value);},[value]);
+  useEffect(()=>{if(editing&&textareaRef.current){textareaRef.current.focus();textareaRef.current.style.height="auto";textareaRef.current.style.height=textareaRef.current.scrollHeight+"px";}});
+  const save=()=>{onChange(draft);setEditing(false);};
+  const cancel=()=>{setDraft(value);setEditing(false);};
+  const insertEmoji=(emoji)=>{
+    const ta=textareaRef.current;if(!ta){setDraft(draft+emoji);return;}
+    const start=ta.selectionStart;const end=ta.selectionEnd;
+    const newText=draft.slice(0,start)+emoji+draft.slice(end);
+    setDraft(newText);
+    setTimeout(()=>{ta.focus();ta.setSelectionRange(start+emoji.length,start+emoji.length);ta.style.height="auto";ta.style.height=ta.scrollHeight+"px";},0);
+  };
+  if(editing) return (<div>
+    <textarea ref={textareaRef} value={draft} onChange={e=>{setDraft(e.target.value);e.target.style.height="auto";e.target.style.height=e.target.scrollHeight+"px";}}
+      onKeyDown={e=>{if(e.key==="Escape")cancel();if(e.key==="Enter"&&e.metaKey)save();}}
+      style={{width:"100%",background:"rgba(200,205,211,0.06)",border:`1px solid rgba(217,170,90,0.3)`,borderRadius:8,padding:"10px 14px",fontSize:14,fontFamily:font,color:C.bright,outline:"none",resize:"none",lineHeight:1.6,boxSizing:"border-box",minHeight:60}}/>
+    <div style={{display:"flex",gap:8,marginTop:6,justifyContent:"flex-end",alignItems:"center"}}>
+      {maxChars&&<span style={{fontSize:10,fontFamily:mono,color:draft.length>maxChars?C.red:C.dim}}>{draft.length}/{maxChars}</span>}
+      <EmojiBtn onPick={insertEmoji}/>
+      <button onClick={cancel} style={{fontSize:11,fontFamily:mono,color:C.muted,background:"none",border:`1px solid ${C.border}`,borderRadius:6,padding:"4px 12px",cursor:"pointer"}}>Cancel</button>
+      <button onClick={save} style={{fontSize:11,fontFamily:mono,color:C.bg,background:C.accent,border:"none",borderRadius:6,padding:"4px 12px",cursor:"pointer",fontWeight:600}}>Save</button>
+    </div>
+  </div>);
+  return (<div onClick={()=>setEditing(true)} style={{cursor:"text",position:"relative",...customStyle}}>
+    <div style={{fontSize:14,color:C.bright,lineHeight:1.6,whiteSpace:"pre-wrap"}}>{value}</div>
+    <div style={{position:"absolute",top:4,right:4,fontSize:9,color:C.dim,fontFamily:mono,opacity:0.5}}>click to edit</div>
+  </div>);
+};
+
+
+// ─── Length Picker ───────────────────────────────────────────────────────────
+const LengthPicker=({value,onChange})=>{
+  const opts=[{id:"short",label:"S"},{id:"normal",label:"M"},{id:"long",label:"L"}];
+  const labels={short:"Short",normal:"Normal",long:"Long"};
+  return (<div style={{display:"flex",gap:2,background:"rgba(200,205,211,0.04)",padding:3,borderRadius:8,border:`1px solid ${C.border}`}} title={`Length: ${labels[value]}`}>
+    {opts.map(o=> <button key={o.id} onClick={()=>onChange(o.id)} style={{padding:"5px 12px",fontSize:11,fontFamily:mono,fontWeight:value===o.id?700:500,color:value===o.id?C.bg:C.muted,background:value===o.id?C.accent:"transparent",border:"none",borderRadius:5,cursor:"pointer",transition:"all 0.15s"}} title={labels[o.id]}>{o.label}</button>)}
+  </div>);
+};
+
+// ─── Emoji Picker ────────────────────────────────────────────────────────────
+const EMOJI_SET=[
+  {cat:"Energy",items:["✦","⚡","🔥","🚀","💪","💥","🎯","⭐"]},
+  {cat:"Direction",items:["↑","↗","→","⬆","📈","📊","💹","🆙"]},
+  {cat:"Build",items:["💰","🏗","🛠","⚒","🔨","💎","🪙","🏆"]},
+  {cat:"Status",items:["◎","●","◆","✨","🌟","💫","☑","✅"]},
+  {cat:"Talk",items:["🧵","💬","📢","🔗","✍","📝","📌","💭"]},
+  {cat:"Reactions",items:["👀","🎉","🙌","👏","🤝","❤️","🫡","🤔"]},
+];
+
+const EmojiPicker=({onPick,onClose})=>(<div style={{position:"absolute",bottom:"100%",right:0,marginBottom:6,zIndex:50,background:"#1A1F25",border:`1px solid ${C.border}`,borderRadius:10,padding:12,width:280,animation:"fadeIn 0.15s ease-out",boxShadow:"0 8px 32px rgba(0,0,0,0.4)"}}>
+  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+    <span style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em"}}>Emojis</span>
+    <button onClick={onClose} style={{background:"none",border:"none",color:C.dim,cursor:"pointer",fontSize:14}}>✕</button>
+  </div>
+  <div style={{maxHeight:280,overflowY:"auto"}}>{EMOJI_SET.map(group=>(<div key={group.cat} style={{marginBottom:10}}>
+    <div style={{fontSize:9,color:C.dim,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4,fontFamily:mono}}>{group.cat}</div>
+    <div style={{display:"flex",flexWrap:"wrap",gap:4}}>{group.items.map(emoji=>(<button key={emoji} onClick={()=>onPick(emoji)} style={{width:32,height:32,fontSize:18,background:"rgba(200,205,211,0.04)",border:`1px solid transparent`,borderRadius:6,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",transition:"all 0.1s"}} onMouseEnter={e=>{e.target.style.background="rgba(217,170,90,0.15)";e.target.style.borderColor=C.accent;}} onMouseLeave={e=>{e.target.style.background="rgba(200,205,211,0.04)";e.target.style.borderColor="transparent";}}>{emoji}</button>))}</div>
+  </div>))}</div>
+</div>);
+
+const EmojiBtn=({onPick})=>{
+  const[show,setShow]=useState(false);
+  return (<div style={{position:"relative",display:"inline-block"}}>
+    <button onClick={()=>setShow(!show)} style={{fontSize:14,fontFamily:mono,color:C.muted,background:"none",border:`1px solid ${C.border}`,borderRadius:6,padding:"3px 10px",cursor:"pointer",lineHeight:1.4}} title="Insert emoji">😊</button>
+    {show&&<EmojiPicker onPick={(e)=>{onPick(e);setShow(false);}} onClose={()=>setShow(false)}/>}
+  </div>);
+};
+
+// ─── Content UI Components ───────────────────────────────────────────────────
+const CopyBtn=({text,label,onCopied})=>{const[copied,setCopied]=useState(false);const copy=()=>{
+  try{
+    if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(text).then(()=>{setCopied(true);if(onCopied)onCopied();setTimeout(()=>setCopied(false),2000);}).catch(()=>fallback());}
+    else{fallback();}
+  }catch(e){fallback();}
+  function fallback(){const ta=document.createElement("textarea");ta.value=text;ta.style.cssText="position:fixed;left:-9999px;top:-9999px";document.body.appendChild(ta);ta.select();try{document.execCommand("copy");setCopied(true);if(onCopied)onCopied();setTimeout(()=>setCopied(false),2000);}catch(e){}document.body.removeChild(ta);}
+};return <button onClick={copy} style={{fontSize:11,fontFamily:mono,color:copied?C.green:C.muted,background:"none",border:`1px solid ${copied?C.greenBdr:C.border}`,borderRadius:6,padding:"4px 10px",cursor:"pointer",transition:"all 0.2s"}}>{copied?"Copied":label||"Copy"}</button>;};
+const DraftBadge=()=> <span style={{fontSize:9,fontWeight:700,fontFamily:mono,color:C.accent,textTransform:"uppercase",letterSpacing:"0.1em",padding:"2px 8px",background:C.accentSoft,borderRadius:4}}>Draft</span>;
+const ScheduledBadge=()=> <span style={{fontSize:9,fontWeight:700,fontFamily:mono,color:C.green,textTransform:"uppercase",letterSpacing:"0.1em",padding:"2px 8px",background:C.greenSoft,borderRadius:4}}>Scheduled</span>;
+const CharCount=({n})=> <span style={{fontSize:10,fontFamily:mono,color:n>280?C.red:C.dim}}>{n}/280</span>;
+
+const STATUS_COLORS={draft:C.dim,scheduled:C.accent,published:C.green};
+const STATUS_LABELS={draft:"Draft",scheduled:"Scheduled",published:"Published"};
+const TYPE_COLORS={post:C.accent,thread:C.blue,article:C.purple};
+const TYPE_LABELS={post:"Post",thread:"Thread",article:"Article"};
+
+const StatusBadge=({status})=> <span style={{fontSize:9,fontWeight:700,fontFamily:mono,color:STATUS_COLORS[status||"draft"],textTransform:"uppercase",letterSpacing:"0.1em",padding:"2px 8px",background:`${STATUS_COLORS[status||"draft"]}15`,borderRadius:4}}>{STATUS_LABELS[status||"draft"]}</span>;
+
+// ─── Schedule Picker ─────────────────────────────────────────────────────────
+const SchedulePicker=({onPick,onClose,scheduledDate})=>{
+  const today=new Date();const days=[];
+  for(let i=0;i<14;i++){const d=new Date(today);d.setDate(d.getDate()+i);days.push(d);}
+  const dayNames=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+  return (<div style={{position:"absolute",top:"100%",right:0,zIndex:50,background:"#1A1F25",border:`1px solid ${C.border}`,borderRadius:10,padding:14,width:280,animation:"fadeIn 0.2s ease-out",boxShadow:"0 8px 32px rgba(0,0,0,0.4)"}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+      <span style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em"}}>{scheduledDate?"Reschedule":"Schedule for"}</span>
+      <button onClick={onClose} style={{background:"none",border:"none",color:C.dim,cursor:"pointer",fontSize:14}}>✕</button>
+    </div>
+    {scheduledDate&&<div style={{fontSize:10,color:C.green,fontFamily:mono,marginBottom:10,padding:"6px 10px",background:C.greenSoft,border:`1px solid ${C.greenBdr}`,borderRadius:6}}>● Currently scheduled: {scheduledDate}</div>}
+    <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4}}>
+      {dayNames.map(d=> <div key={d} style={{textAlign:"center",fontSize:8,color:C.dim,fontFamily:mono,padding:2}}>{d}</div>)}
+      {Array(days[0].getDay()).fill(null).map((_,i)=> <div key={`pad-${i}`}/>)}
+      {days.map(d=>{const key=d.toISOString().split("T")[0];const isToday=d.toDateString()===today.toDateString();const isScheduled=key===scheduledDate;
+        return (<button key={key} onClick={()=>onPick(key)} style={{padding:"6px 2px",fontSize:12,fontFamily:mono,fontWeight:(isScheduled||isToday)?700:400,color:isScheduled?C.bg:isToday?C.accent:C.text,background:isScheduled?C.green:isToday?"rgba(217,170,90,0.08)":"transparent",border:`1px solid ${isScheduled?C.green:isToday?C.accentSoft:"transparent"}`,borderRadius:6,cursor:"pointer"}}>{d.getDate()}</button>);
+      })}
+    </div>
+  </div>);
+};
+
+const ScheduleBtn=({onSchedule,scheduledDate})=>{
+  const[show,setShow]=useState(false);
+  return (<div style={{position:"relative",display:"inline-block"}}>
+    <button onClick={()=>setShow(!show)} style={{fontSize:11,fontFamily:mono,color:scheduledDate?C.green:C.accent,background:scheduledDate?C.greenSoft:"none",border:`1px solid ${scheduledDate?C.greenBdr:C.accentSoft}`,borderRadius:6,padding:"4px 10px",cursor:"pointer"}}>📅 {scheduledDate?"Scheduled":"Schedule"}</button>
+    {show&&<SchedulePicker onPick={(date)=>{onSchedule(date);setShow(false);}} onClose={()=>setShow(false)} scheduledDate={scheduledDate}/>}
+  </div>);
+};
+
+// ─── Prompt Templates ────────────────────────────────────────────────────────
+const PROMPT_TEMPLATES={
+  voice:`You are a senior brand strategist. Create a comprehensive Brand & Voice document for [PRODUCT_NAME], a [PRODUCT_DESCRIPTION] in the [INDUSTRY] space.
+
+Their founding philosophy: [PHILOSOPHY]
+
+Brands whose voice they admire: [REFERENCE_BRANDS]
+
+Generate a markdown document (300-500 words) with these sections:
+
+## Brand Identity
+2-3 sentences capturing the essence of who [PRODUCT_NAME] is and what they stand for.
+
+## Voice Attributes
+4-5 voice attributes with brief descriptions (e.g., "Confident, not arrogant — we know our value but stay grounded").
+
+## Tone Guidelines
+3-4 specific tone instructions for how the brand should sound across content.
+
+## Vocabulary
+- 5-8 words/phrases to USE often (signature language)
+- 5-8 words/phrases to AVOID (clichés, off-brand terms)
+
+## Examples
+2-3 example sentences showing the voice in action: one for a product update, one for community engagement, one for industry commentary.
+
+Write in confident, specific language. No generic platitudes. Every line should feel unique to [PRODUCT_NAME], not interchangeable with any other brand.`,
+
+  product:`You are a senior product marketer. Create a Product Context document for [PRODUCT_NAME], a [PRODUCT_DESCRIPTION] in the [INDUSTRY] space.
+
+Main competitors: [COMPETITORS]
+
+What makes [PRODUCT_NAME] different: [DIFFERENTIATORS]
+
+Current development phase: [PHASE]
+
+Generate a markdown document (300-500 words) with these sections:
+
+## What [PRODUCT_NAME] Does
+2-3 sentence elevator pitch that anyone could understand.
+
+## Core Features
+5-7 features with one-line descriptions. Lead with the user benefit, not the technical detail.
+
+## Value Propositions
+3-4 clear "why this matters" statements. What problem does each solve?
+
+## Differentiators
+3-5 specific reasons to choose [PRODUCT_NAME] over competitors. Be specific — not "better UX" but "no KYC required, full self-custody, instant settlements".
+
+## Use Cases
+3 concrete scenarios where [PRODUCT_NAME] is the right choice, with a one-sentence description each.
+
+## Technical Notes
+2-4 technical details that matter for content (e.g., "Built on Solana", "Open-source smart contracts").
+
+Be specific and concrete. Avoid marketing fluff. If you don't know a detail, mark it as [NEEDS_INPUT] rather than inventing.`,
+
+  audience:`You are a senior audience strategist. Create an Audience Context document for [PRODUCT_NAME], a [PRODUCT_DESCRIPTION] in the [INDUSTRY] space.
+
+Primary target users: [TARGET_USERS]
+
+Where they currently spend time online: [PLATFORMS]
+
+How they currently solve this problem: [CURRENT_SOLUTIONS]
+
+Generate a markdown document (300-500 words) with these sections:
+
+## Primary Audience
+2-3 sentence description of the core target user — who they are, what they do, what defines them.
+
+## Demographics & Psychographics
+- Age range, occupation, tech-savviness
+- Values, motivations, identity markers
+- 3-5 bullet points
+
+## Pain Points
+4-6 specific frustrations this audience has with current solutions. Be specific — what makes them angry, what wastes their time, what feels unfair.
+
+## What They Care About
+4-5 things that matter to them when choosing a product (transparency, speed, community, savings, status, etc.)
+
+## What They're Skeptical Of
+3-4 things this audience instinctively distrusts (overpromising, hidden fees, fake testimonials, corporate speak, etc.)
+
+## Where They Hang Out
+Specific platforms, communities, influencers, or media this audience consumes.
+
+## Language They Use
+5-8 phrases/terms this audience uses naturally. Words that signal "I'm one of you" when used correctly.
+
+Be specific, not generic. "Crypto users" is too broad. "Solana DeFi power users who self-custody and got rugged at least once" is useful.`,
+
+  campaign:`You are a senior campaign strategist. Create a Campaign Context document for [PRODUCT_NAME]'s current marketing push.
+
+Campaign name: [CAMPAIGN_NAME]
+Campaign goal: [GOAL]
+Timeline: [TIMELINE]
+Key dates / milestones: [KEY_DATES]
+Target audience for this campaign: [AUDIENCE]
+
+Generate a markdown document (300-500 words) with these sections:
+
+## Campaign Overview
+2-3 sentences summarizing what this campaign is and why it matters now.
+
+## Key Messages
+3-5 core messages to drive home throughout the campaign. Each should be tight and memorable.
+
+## Talking Points
+6-10 specific talking points with one-line elaboration. These are the things every post, thread, or article should be working toward.
+
+## Angles
+4-5 different angles to approach the campaign from (e.g., founder reflection, milestone celebration, behind-the-scenes, community spotlight, urgency/scarcity, social proof).
+
+## Do's
+4-5 things content during this campaign SHOULD do.
+
+## Don'ts
+4-5 things content during this campaign should AVOID (overhype, false scarcity, vague promises, etc.)
+
+## Sequencing
+Brief notes on how messaging should evolve across the campaign timeline (early vs middle vs late phase).
+
+Be specific to [CAMPAIGN_NAME]. Tie everything to the goal. If something doesn't drive the goal, leave it out.`,
+
+  examples:`You are a content analyst. Create an Examples Reference document for [PRODUCT_NAME] to inform AI content generation.
+
+Example posts/content I want to use as references:
+[PASTE_EXAMPLES]
+
+For each example I provided, generate a markdown document (300-500 words total) with this structure:
+
+## Example 1: [Brief Title]
+**Original content:** [Reproduce the example]
+
+**Why this works:**
+- 3-4 specific elements that make this example effective (hook, structure, tone, vocabulary, etc.)
+
+**Patterns to replicate:**
+- 2-3 specific patterns that could be applied to new content (e.g., "open with a big number contrast", "use second-person 'you' for community building")
+
+## Example 2: [Brief Title]
+[Same structure]
+
+## Example 3: [Brief Title]
+[Same structure]
+
+## Common Threads
+After analyzing all examples, list 4-6 patterns that appear across multiple examples. These are the high-value style elements to consistently apply.
+
+## Anti-patterns
+Based on what these examples DON'T do, list 3-5 things to avoid in new content.
+
+Be specific in your analysis. Don't just say "great hook" — explain WHY it's a great hook. Mechanics matter more than vibes.`,
+};
+
+const PromptTemplateModal=({category,onClose})=>{
+  const cat=CONTEXT_CATEGORIES.find(c=>c.id===category);
+  const template=PROMPT_TEMPLATES[category]||"";
+  const[copied,setCopied]=useState(false);
+
+  const copyPrompt=()=>{
+    try{
+      if(navigator.clipboard?.writeText){navigator.clipboard.writeText(template).then(()=>{setCopied(true);setTimeout(()=>setCopied(false),2000);}).catch(()=>fallback());}
+      else fallback();
+    }catch(e){fallback();}
+    function fallback(){const ta=document.createElement("textarea");ta.value=template;ta.style.cssText="position:fixed;left:-9999px";document.body.appendChild(ta);ta.select();try{document.execCommand("copy");setCopied(true);setTimeout(()=>setCopied(false),2000);}catch(e){}document.body.removeChild(ta);}
+  };
+
+  return (<div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:100,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px",animation:"fadeIn 0.2s ease-out"}}>
+    <div onClick={e=>e.stopPropagation()} style={{background:"#13171C",border:`1px solid ${C.border}`,borderRadius:14,maxWidth:780,width:"100%",maxHeight:"90vh",display:"flex",flexDirection:"column",overflow:"hidden"}}>
+      {/* Header */}
+      <div style={{padding:"22px 26px",borderBottom:`1px solid ${C.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
+        <div>
+          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:4}}>
+            <span style={{fontSize:20}}>{cat?.icon}</span>
+            <span style={{fontSize:11,fontWeight:600,color:cat?.color,textTransform:"uppercase",letterSpacing:"0.08em",fontFamily:mono}}>{cat?.label}</span>
+          </div>
+          <div style={{fontSize:18,fontWeight:600,color:C.bright,letterSpacing:"-0.01em"}}>Prompt Template</div>
+        </div>
+        <button onClick={onClose} style={{background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:20,padding:4}}>✕</button>
+      </div>
+
+      {/* Instructions */}
+      <div style={{padding:"16px 26px",background:"rgba(217,170,90,0.04)",borderBottom:`1px solid ${C.border}`,fontSize:12,color:C.text,lineHeight:1.6,flexShrink:0}}>
+        <strong style={{color:C.accent}}>How to use:</strong> Copy this prompt, replace the [PLACEHOLDERS] with your specifics, paste into Claude / ChatGPT / Gemini, then save the response as a .md or .txt file and upload it back here.
+      </div>
+
+      {/* Prompt body */}
+      <div style={{padding:"22px 26px",overflowY:"auto",flex:1}}>
+        <div style={{background:"rgba(200,205,211,0.03)",border:`1px solid ${C.border}`,borderRadius:10,padding:"18px 22px",fontSize:13,fontFamily:font,color:C.text,lineHeight:1.7,whiteSpace:"pre-wrap"}}>{template}</div>
+      </div>
+
+      {/* Footer */}
+      <div style={{padding:"16px 26px",borderTop:`1px solid ${C.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0,gap:12}}>
+        <div style={{fontSize:11,color:C.dim,fontFamily:mono}}>~{template.split(/\s+/).length} words</div>
+        <div style={{display:"flex",gap:8}}>
+          <button onClick={onClose} style={{padding:"9px 20px",fontSize:13,fontFamily:font,color:C.muted,background:"none",border:`1px solid ${C.border}`,borderRadius:8,cursor:"pointer"}}>Close</button>
+          <button onClick={copyPrompt} style={{padding:"9px 22px",fontSize:13,fontFamily:font,fontWeight:600,color:copied?C.bg:C.bg,background:copied?C.green:`linear-gradient(135deg,${C.accent},#E8C06A)`,border:"none",borderRadius:8,cursor:"pointer",transition:"all 0.2s"}}>{copied?"✓ Copied":"📋 Copy Prompt"}</button>
+        </div>
+      </div>
+    </div>
+  </div>);
+};
+
+// ─── Context Files Panel ─────────────────────────────────────────────────────
+const CONTEXT_CATEGORIES=[
+  {id:"voice",label:"Brand & Voice",icon:"🎙",desc:"Who you are and how you sound",color:C.accent,placeholder:"Describe your brand identity, voice attributes, words to use/avoid, tone guidelines..."},
+  {id:"product",label:"Product",icon:"📦",desc:"What you're talking about",color:C.blue,placeholder:"Product features, value propositions, differentiators, technical details..."},
+  {id:"audience",label:"Audience",icon:"👥",desc:"Who you're writing for",color:C.green,placeholder:"Target users, demographics, pain points, what they care about..."},
+  {id:"campaign",label:"Campaign",icon:"📢",desc:"What's happening now",color:C.pink,placeholder:"Current launches, promotions, key talking points for this period..."},
+  {id:"examples",label:"Examples",icon:"💡",desc:"Reference content to mimic",color:C.purple,placeholder:"Past posts that performed well, tone you want to copy..."},
+];
+const WORD_LIMIT=2000;
+const countWords=(text)=>(text||"").trim().split(/\s+/).filter(Boolean).length;
+
+const ContextFilesPanel=({files,onUpdate,show,onToggle,hideClose})=>{
+  const fileRef=useRef(null);
+  const[mode,setMode]=useState(null);
+  const[draftCategory,setDraftCategory]=useState("voice");
+  const[draftLabel,setDraftLabel]=useState("");
+  const[draftContent,setDraftContent]=useState("");
+  const[expandedFile,setExpandedFile]=useState(null);
+  const[editingFile,setEditingFile]=useState(null);
+  const[editContent,setEditContent]=useState("");
+  const[promptModalCategory,setPromptModalCategory]=useState(null);
+
+  const wordCount=countWords(draftContent);
+  const isOverLimit=wordCount>WORD_LIMIT;
+
+  const reset=()=>{setMode(null);setDraftLabel("");setDraftContent("");setDraftCategory("voice");};
+
+  const handleFileUpload=(e)=>{
+    const file=e.target.files?.[0];if(!file)return;
+    const reader=new FileReader();
+    reader.onload=(ev)=>{
+      const content=ev.target.result;
+      setDraftContent(content);
+      setDraftLabel(file.name.replace(/\.(md|txt)$/i,""));
+      setMode("paste");
+    };
+    reader.readAsText(file);
+    e.target.value="";
+  };
+
+  const saveFile=()=>{
+    if(!draftContent.trim()||!draftLabel.trim()) return;
+    const newFile={id:Date.now(),category:draftCategory,label:draftLabel.trim(),content:draftContent.trim(),active:true,createdAt:Date.now(),wordCount:countWords(draftContent)};
+    onUpdate([...files,newFile]);
+    reset();
+  };
+
+  const toggleActive=(id)=>onUpdate(files.map(f=>f.id===id?{...f,active:!f.active}:f));
+  const removeFile=(id)=>{onUpdate(files.filter(f=>f.id!==id));if(expandedFile===id)setExpandedFile(null);};
+  const startEditing=(file)=>{setEditingFile(file.id);setEditContent(file.content);setExpandedFile(file.id);};
+  const saveEdit=(id)=>{onUpdate(files.map(f=>f.id===id?{...f,content:editContent.trim(),wordCount:countWords(editContent)}:f));setEditingFile(null);};
+
+  const activeCount=files.filter(f=>f.active).length;
+  const filesByCategory=CONTEXT_CATEGORIES.reduce((acc,cat)=>{acc[cat.id]=files.filter(f=>f.category===cat.id);return acc;},{});
+
+  if(!show) return null;
+
+  return (<div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"22px 24px",marginBottom:24,animation:"fadeIn 0.3s ease-out"}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+      <div style={{fontSize:12,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em"}}>Context Files</div>
+      {!hideClose&&<button onClick={onToggle} style={{background:"none",border:"none",color:C.dim,cursor:"pointer",fontSize:16}}>✕</button>}
+    </div>
+    <div style={{fontSize:11,color:C.dim,marginBottom:16,lineHeight:1.5}}>Files inform AI generation across all tabs. Toggle each file on/off to control which context applies. Active: <span style={{color:C.green,fontFamily:mono}}>{activeCount}</span> / {files.length}</div>
+
+    {/* Add new buttons */}
+    {!mode&&<div style={{marginBottom:20}}>
+      <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
+        <button onClick={()=>setMode("paste")} style={{padding:"10px 18px",fontSize:13,fontWeight:600,fontFamily:font,color:C.bg,background:`linear-gradient(135deg,${C.accent},#E8C06A)`,border:"none",borderRadius:8,cursor:"pointer"}}>+ Paste Text</button>
+        <button onClick={()=>fileRef.current?.click()} style={{padding:"10px 18px",fontSize:13,fontWeight:600,fontFamily:font,color:C.text,background:"rgba(200,205,211,0.04)",border:`1px solid ${C.border}`,borderRadius:8,cursor:"pointer"}}>📁 Upload File (.txt, .md)</button>
+        <input ref={fileRef} type="file" accept=".txt,.md,text/plain,text/markdown" onChange={handleFileUpload} style={{display:"none"}}/>
+      </div>
+      <div style={{padding:"12px 14px",background:"rgba(176,90,217,0.04)",border:`1px solid rgba(176,90,217,0.15)`,borderRadius:10}}>
+        <div style={{fontSize:11,fontWeight:600,color:C.purple,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8,display:"flex",alignItems:"center",gap:6}}>✨ Need help writing context?</div>
+        <div style={{fontSize:11,color:C.dim,marginBottom:10,lineHeight:1.5}}>Get a prompt template to paste into Claude or ChatGPT, then upload the response below.</div>
+        <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{CONTEXT_CATEGORIES.map(cat=>(<button key={cat.id} onClick={()=>setPromptModalCategory(cat.id)} style={{padding:"6px 12px",fontSize:11,fontFamily:font,fontWeight:500,color:cat.color,background:`${cat.color}10`,border:`1px solid ${cat.color}40`,borderRadius:6,cursor:"pointer",display:"flex",alignItems:"center",gap:5,transition:"all 0.15s"}} onMouseEnter={e=>{e.currentTarget.style.background=`${cat.color}25`;}} onMouseLeave={e=>{e.currentTarget.style.background=`${cat.color}10`;}}>{cat.icon} {cat.label}</button>))}</div>
+      </div>
+    </div>}
+
+    {/* Add form */}
+    {mode==="paste"&&<div style={{background:"rgba(200,205,211,0.02)",border:`1px solid ${C.border}`,borderRadius:10,padding:"18px 20px",marginBottom:20,animation:"fadeIn 0.2s ease-out"}}>
+      <div style={{display:"grid",gap:12}}>
+        {/* Category picker */}
+        <div>
+          <label style={{display:"block",fontSize:10,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Category</label>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{CONTEXT_CATEGORIES.map(cat=>(<button key={cat.id} onClick={()=>setDraftCategory(cat.id)} style={{padding:"6px 12px",fontSize:11,fontFamily:font,fontWeight:draftCategory===cat.id?600:400,color:draftCategory===cat.id?cat.color:C.muted,background:draftCategory===cat.id?`${cat.color}15`:"rgba(200,205,211,0.04)",border:`1px solid ${draftCategory===cat.id?cat.color:C.border}`,borderRadius:6,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>{cat.icon} {cat.label}</button>))}</div>
+          <div style={{fontSize:10,color:C.dim,marginTop:4}}>{CONTEXT_CATEGORIES.find(c=>c.id===draftCategory)?.desc}</div>
+        </div>
+        {/* Label */}
+        <div>
+          <label style={{display:"block",fontSize:10,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Label</label>
+          <input value={draftLabel} onChange={e=>setDraftLabel(e.target.value)} placeholder="e.g., 'Honoroll voice guide', 'Q1 launch talking points'"
+            style={{width:"100%",background:"rgba(200,205,211,0.05)",border:`1px solid ${C.border}`,borderRadius:8,padding:"9px 12px",fontSize:13,fontFamily:font,color:C.bright,outline:"none",boxSizing:"border-box"}}/>
+        </div>
+        {/* Content */}
+        <div>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+            <label style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em"}}>Content</label>
+            <span style={{fontSize:10,fontFamily:mono,color:isOverLimit?C.red:wordCount>WORD_LIMIT*0.8?C.accent:C.dim}}>{wordCount} / {WORD_LIMIT} words {isOverLimit&&"⚠"}</span>
+          </div>
+          <textarea value={draftContent} onChange={e=>setDraftContent(e.target.value)} placeholder={CONTEXT_CATEGORIES.find(c=>c.id===draftCategory)?.placeholder}
+            style={{width:"100%",background:"rgba(200,205,211,0.05)",border:`1px solid ${isOverLimit?"rgba(248,113,113,0.4)":C.border}`,borderRadius:8,padding:"12px 14px",fontSize:13,fontFamily:font,color:C.bright,outline:"none",resize:"vertical",lineHeight:1.6,boxSizing:"border-box",minHeight:160}}/>
+          {isOverLimit&&<div style={{fontSize:10,color:C.red,marginTop:4}}>Over the soft limit. Consider summarizing for better AI performance.</div>}
+        </div>
+        <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+          <button onClick={reset} style={{fontSize:12,fontFamily:mono,color:C.muted,background:"none",border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 16px",cursor:"pointer"}}>Cancel</button>
+          <button onClick={saveFile} disabled={!draftContent.trim()||!draftLabel.trim()} style={{fontSize:13,fontFamily:font,fontWeight:600,color:C.bg,background:(!draftContent.trim()||!draftLabel.trim())?"rgba(200,205,211,0.06)":`linear-gradient(135deg,${C.accent},#E8C06A)`,border:"none",borderRadius:8,padding:"8px 20px",cursor:"pointer",opacity:(!draftContent.trim()||!draftLabel.trim())?0.4:1}}>Save</button>
+        </div>
+      </div>
+    </div>}
+
+    {/* File list grouped by category */}
+    {files.length===0&&!mode&&<div style={{padding:"32px 24px",textAlign:"center",border:`1px dashed ${C.border}`,borderRadius:10}}>
+      <div style={{fontSize:24,marginBottom:8,opacity:0.4}}>📄</div>
+      <div style={{fontSize:13,color:C.muted,marginBottom:4}}>No context files yet</div>
+      <div style={{fontSize:11,color:C.dim}}>Upload a file or paste text to inform AI content generation</div>
+    </div>}
+
+    {files.length>0&&<div>
+      {CONTEXT_CATEGORIES.map(cat=>{const catFiles=filesByCategory[cat.id];if(catFiles.length===0)return null;
+        return (<div key={cat.id} style={{marginBottom:14}}>
+          <div style={{fontSize:10,fontWeight:600,color:cat.color,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8,display:"flex",alignItems:"center",gap:6}}>{cat.icon} {cat.label} <span style={{color:C.dim,fontWeight:400}}>({catFiles.length})</span></div>
+          <div style={{display:"flex",flexDirection:"column",gap:6}}>{catFiles.map(file=>(<div key={file.id} style={{background:"rgba(200,205,211,0.02)",border:`1px solid ${file.active?cat.color+"30":C.border}`,borderRadius:8,padding:"10px 14px",opacity:file.active?1:0.55,transition:"all 0.15s"}}>
+            <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+              {/* Toggle */}
+              <button onClick={()=>toggleActive(file.id)} title={file.active?"Active (click to disable)":"Inactive (click to enable)"} style={{width:32,height:18,borderRadius:9,background:file.active?cat.color:"rgba(200,205,211,0.1)",border:"none",cursor:"pointer",position:"relative",padding:0,transition:"all 0.2s",flexShrink:0}}>
+                <div style={{width:14,height:14,borderRadius:"50%",background:"#fff",position:"absolute",top:2,left:file.active?16:2,transition:"left 0.2s"}}/>
+              </button>
+              <div style={{flex:1,minWidth:160}}>
+                <div style={{fontSize:13,color:C.bright,fontWeight:500}}>{file.label}</div>
+                <div style={{fontSize:10,fontFamily:mono,color:C.dim,marginTop:2}}>{file.wordCount} words · {new Date(file.createdAt).toLocaleDateString()}</div>
+              </div>
+              <button onClick={()=>setExpandedFile(expandedFile===file.id?null:file.id)} style={{fontSize:11,fontFamily:mono,color:C.muted,background:"none",border:`1px solid ${C.border}`,borderRadius:6,padding:"4px 10px",cursor:"pointer"}}>{expandedFile===file.id?"Hide":"View"}</button>
+              <button onClick={()=>editingFile===file.id?saveEdit(file.id):startEditing(file)} style={{fontSize:11,fontFamily:mono,color:editingFile===file.id?C.accent:C.muted,background:"none",border:`1px solid ${editingFile===file.id?C.accent:C.border}`,borderRadius:6,padding:"4px 10px",cursor:"pointer"}}>{editingFile===file.id?"Save":"Edit"}</button>
+              <button onClick={()=>removeFile(file.id)} style={{fontSize:11,fontFamily:mono,color:C.red,background:"none",border:`1px solid rgba(248,113,113,0.2)`,borderRadius:6,padding:"4px 10px",cursor:"pointer"}}>✕</button>
+            </div>
+            {/* Expanded content */}
+            {expandedFile===file.id&&<div style={{marginTop:10,paddingTop:10,borderTop:`1px solid ${C.border}`,animation:"fadeIn 0.2s ease-out"}}>
+              {editingFile===file.id?<textarea value={editContent} onChange={e=>setEditContent(e.target.value)}
+                style={{width:"100%",background:"rgba(200,205,211,0.05)",border:`1px solid rgba(217,170,90,0.3)`,borderRadius:8,padding:"10px 12px",fontSize:12,fontFamily:font,color:C.bright,outline:"none",resize:"vertical",lineHeight:1.6,boxSizing:"border-box",minHeight:120}}/>
+              :<div style={{fontSize:12,color:C.text,lineHeight:1.65,whiteSpace:"pre-wrap",maxHeight:240,overflow:"auto",fontFamily:font}}>{file.content}</div>}
+            </div>}
+          </div>))}</div>
+        </div>);
+      })}
+    </div>}
+    {promptModalCategory&&<PromptTemplateModal category={promptModalCategory} onClose={()=>setPromptModalCategory(null)}/>}
+  </div>);
+};
+
+// Build context string for prompts from active files
+const buildContextString=(files)=>{
+  const active=(files||[]).filter(f=>f.active);
+  if(active.length===0) return "";
+  const sections=CONTEXT_CATEGORIES.map(cat=>{
+    const catFiles=active.filter(f=>f.category===cat.id);
+    if(catFiles.length===0) return null;
+    const sectionHeader=`### ${cat.label.toUpperCase()} CONTEXT`;
+    const filesContent=catFiles.map(f=>`[${f.label}]\n${f.content}`).join("\n\n");
+    return `${sectionHeader}\n${filesContent}`;
+  }).filter(Boolean);
+  if(sections.length===0) return "";
+  return `\n\n=== USER-PROVIDED CONTEXT (use this as primary source of truth for brand voice, product details, audience, and current campaigns) ===\n\n${sections.join("\n\n")}\n\n=== END USER CONTEXT ===\n`;
+};
+
+// ─── Brand Assets Panel ──────────────────────────────────────────────────────
+const BrandAssetsPanel=({assets,onUpdate,show,onToggle,hideClose})=>{
+  const fileRef=useRef(null);
+  const addAsset=(e)=>{
+    const file=e.target.files?.[0];if(!file)return;
+    const reader=new FileReader();
+    reader.onload=(ev)=>{
+      const newAsset={id:Date.now(),name:file.name,dataUrl:ev.target.result,description:""};
+      onUpdate([...assets,newAsset]);
+    };
+    reader.readAsDataURL(file);
+    e.target.value="";
+  };
+  const removeAsset=(id)=>onUpdate(assets.filter(a=>a.id!==id));
+  const updateDesc=(id,desc)=>onUpdate(assets.map(a=>a.id===id?{...a,description:desc}:a));
+
+  if(!show) return null;
+  return (<div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"20px 22px",marginBottom:24,animation:"fadeIn 0.3s ease-out"}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+      <div style={{fontSize:12,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em"}}>Brand Assets</div>
+      <div style={{display:"flex",gap:8}}>
+        <button onClick={()=>fileRef.current?.click()} style={{fontSize:11,fontFamily:font,color:C.bg,background:C.accent,border:"none",borderRadius:6,padding:"5px 14px",cursor:"pointer",fontWeight:600}}>+ Upload</button>
+        {!hideClose&&<button onClick={onToggle} style={{background:"none",border:"none",color:C.dim,cursor:"pointer",fontSize:14}}>✕</button>}
+      </div>
+    </div>
+    <input ref={fileRef} type="file" accept="image/*" onChange={addAsset} style={{display:"none"}}/>
+    <div style={{fontSize:11,color:C.dim,marginBottom:14,lineHeight:1.5}}>Upload logos, brand marks, color palettes, and style references. These inform AI artwork generation.</div>
+    {assets.length===0&&<div style={{padding:"20px",textAlign:"center",border:`1px dashed ${C.border}`,borderRadius:8,color:C.dim,fontSize:12}}>No assets uploaded yet</div>}
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(140px, 1fr))",gap:10}}>
+      {assets.map(a=> (<div key={a.id} style={{background:"rgba(200,205,211,0.03)",borderRadius:8,overflow:"hidden",border:`1px solid ${C.border}`}}>
+        <img src={a.dataUrl} alt={a.name} style={{width:"100%",height:80,objectFit:"cover",display:"block"}}/>
+        <div style={{padding:"8px"}}>
+          <input value={a.description} onChange={e=>updateDesc(a.id,e.target.value)} placeholder="Describe this asset..."
+            style={{width:"100%",background:"transparent",border:"none",borderBottom:`1px solid ${C.border}`,fontSize:10,fontFamily:font,color:C.text,outline:"none",padding:"2px 0",marginBottom:4,boxSizing:"border-box"}}/>
+          <button onClick={()=>removeAsset(a.id)} style={{fontSize:9,color:C.red,background:"none",border:"none",cursor:"pointer"}}>Remove</button>
+        </div>
+      </div>))}
+    </div>
+  </div>);
+};
+
+// ─── Content Calendar (Enhanced with Preview) ────────────────────────────────
+const ContentCalendar=({history,onUpdateEntry,onDeleteEntry})=>{
+  const[view,setView]=useState("week");
+  const[preview,setPreview]=useState(null);
+  const today=new Date();const dayNames=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+  const monthNames=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const days=[];
+  if(view==="week"){
+    // Show today + next 6 days (rolling week) — aligns with content scheduling needs
+    for(let i=0;i<7;i++){const d=new Date(today);d.setDate(today.getDate()+i);days.push(d);}
+  }
+  else{const first=new Date(today.getFullYear(),today.getMonth(),1);const last=new Date(today.getFullYear(),today.getMonth()+1,0);
+    for(let i=0;i<first.getDay();i++)days.push(null);
+    for(let i=1;i<=last.getDate();i++)days.push(new Date(today.getFullYear(),today.getMonth(),i));}
+  const totalP=history.filter(h=>h.type==="post").length;const totalT=history.filter(h=>h.type==="thread").length;const totalA=history.filter(h=>h.type==="article").length;
+  const cycleStatus=(entry)=>{const order=["draft","scheduled","published"];const next=order[(order.indexOf(entry.status||"draft")+1)%3];onUpdateEntry({...entry,status:next});};
+
+  return (<div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"20px 22px",marginBottom:24}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:8}}>
+      <div style={{fontSize:12,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em"}}>{view==="week"?"Next 7 Days":`${monthNames[today.getMonth()]} ${today.getFullYear()}`}</div>
+      <div style={{display:"flex",gap:4}}>{["week","month"].map(v=> <button key={v} onClick={()=>setView(v)} style={{padding:"5px 14px",fontSize:11,fontFamily:font,fontWeight:view===v?600:400,color:view===v?C.bg:C.muted,background:view===v?C.accent:"rgba(200,205,211,0.04)",border:view===v?"none":`1px solid ${C.border}`,borderRadius:6,cursor:"pointer",textTransform:"capitalize"}}>{v}</button>)}</div>
+    </div>
+    {history.length>0&&<div style={{marginBottom:16}}>
+      <div style={{display:"flex",height:6,borderRadius:3,overflow:"hidden",gap:2,marginBottom:8}}>
+        {totalP>0&&<div style={{flex:totalP,background:C.accent,borderRadius:3}}/>}{totalT>0&&<div style={{flex:totalT,background:C.blue,borderRadius:3}}/>}{totalA>0&&<div style={{flex:totalA,background:C.purple,borderRadius:3}}/>}
+      </div>
+      <div style={{display:"flex",gap:16,fontSize:10,color:C.muted,fontFamily:mono}}><span><Dot color={C.accent}/>{totalP} posts</span><span><Dot color={C.blue}/>{totalT} threads</span><span><Dot color={C.purple}/>{totalA} articles</span></div>
+    </div>}
+    <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4,marginBottom:4}}>
+      {view==="week"
+        ? days.map((d,i)=> <div key={i} style={{textAlign:"center",fontSize:9,color:C.dim,fontFamily:mono,padding:2}}>{dayNames[d.getDay()]}</div>)
+        : dayNames.map(d=> <div key={d} style={{textAlign:"center",fontSize:9,color:C.dim,fontFamily:mono,padding:2}}>{d}</div>)
+      }
+    </div>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4}}>
+      {days.map((d,i)=>{if(!d) return <div key={`e-${i}`}/>;const key=d.toISOString().split("T")[0];const items=history.filter(h=>h.date===key);const isToday=key===today.toISOString().split("T")[0];
+        return (<div key={key} onClick={()=>items.length>0&&setPreview(preview===key?null:key)} style={{textAlign:"center",padding:view==="week"?"12px 4px":"8px 4px",borderRadius:8,cursor:items.length?"pointer":"default",background:isToday?"rgba(217,170,90,0.06)":"transparent",border:isToday?`1px solid ${C.accentSoft}`:`1px solid transparent`,transition:"all 0.15s",minHeight:view==="week"?70:40}}>
+          <div style={{fontSize:view==="week"?14:12,fontWeight:600,color:isToday?C.accent:C.muted,fontFamily:mono}}>{d.getDate()}</div>
+          <div style={{display:"flex",justifyContent:"center",gap:3,marginTop:4,flexWrap:"wrap"}}>{items.map((it,j)=> <div key={j} style={{width:8,height:8,borderRadius:"50%",background:TYPE_COLORS[it.type],border:it.status==="published"?`2px solid ${C.green}`:it.status==="scheduled"?`2px solid ${C.accent}`:"2px solid transparent",boxSizing:"border-box"}}/>)}</div>
+        </div>);})}
+    </div>
+    {/* Preview Modal */}
+    {preview&&<div style={{marginTop:16,animation:"fadeIn 0.2s ease-out"}}>
+      {history.filter(h=>h.date===preview).map((entry,i)=> (<div key={i} style={{background:"#13171C",border:`1px solid ${C.border}`,borderRadius:12,padding:0,marginBottom:12,overflow:"hidden"}}>
+        {/* X-style preview header */}
+        <div style={{padding:"16px 18px",borderBottom:`1px solid ${C.border}`}}>
+          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+            <div style={{width:36,height:36,borderRadius:"50%",background:`linear-gradient(135deg,${C.accent},#E8C06A)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:700,color:C.bg}}>H</div>
+            <div><div style={{fontSize:13,fontWeight:600,color:C.bright}}>Honoroll</div><div style={{fontSize:11,color:C.dim,fontFamily:mono}}>@honoroll</div></div>
+            <div style={{marginLeft:"auto",display:"flex",gap:6,alignItems:"center"}}>
+              <button onClick={(e)=>{e.stopPropagation();cycleStatus(entry);}} style={{fontSize:9,fontWeight:600,fontFamily:mono,color:STATUS_COLORS[entry.status||"draft"],padding:"3px 8px",background:`${STATUS_COLORS[entry.status||"draft"]}15`,border:`1px solid ${STATUS_COLORS[entry.status||"draft"]}30`,borderRadius:4,cursor:"pointer",textTransform:"uppercase"}}>{STATUS_LABELS[entry.status||"draft"]} ↻</button>
+              <span style={{fontSize:10,fontFamily:mono,color:C.dim}}>{TYPE_LABELS[entry.type]}</span>
+            </div>
+          </div>
+          <div style={{fontSize:14,color:C.text,lineHeight:1.6,whiteSpace:"pre-wrap"}}>{entry.fullText||entry.preview}</div>
+          {entry.image&&<div style={{marginTop:12,borderRadius:8,overflow:"hidden",border:`1px solid ${C.border}`,position:"relative"}}>
+            <img src={entry.image} alt="" style={{width:"100%",aspectRatio:"16/9",objectFit:"cover",display:"block"}}/>
+            <button onClick={()=>onUpdateEntry({...entry,image:null})} title="Remove image" style={{position:"absolute",top:8,right:8,width:28,height:28,borderRadius:"50%",background:"rgba(11,14,17,0.85)",border:`1px solid ${C.border}`,color:C.red,cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
+          </div>}
+          {!entry.image&&<CalendarImageUpload entry={entry} onUpdateEntry={onUpdateEntry}/>}
+        </div>
+        {/* Export actions */}
+        <div style={{padding:"10px 18px",display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+          <CopyBtn text={entry.fullText||entry.preview} label="Copy for X" onCopied={()=>onUpdateEntry({...entry,status:"published"})}/>
+          {entry.type==="thread"&&<CopyBtn text={(entry.fullText||"").split("\n\n").map(t=>t.replace(/^\d+\.\s/,"")).join("\n\n🧵\n\n")} label="Copy for Typefully"/>}
+          {entry.image&&<button onClick={()=>{const a=document.createElement("a");a.href=entry.image;a.download="honoroll-image.png";a.click();}} style={{fontSize:11,fontFamily:mono,color:C.blue,background:"none",border:`1px solid rgba(90,184,217,0.3)`,borderRadius:6,padding:"4px 10px",cursor:"pointer"}}>Download image</button>}
+          <button onClick={()=>onDeleteEntry(entry.id)} style={{fontSize:11,fontFamily:mono,color:C.red,background:"none",border:`1px solid rgba(248,113,113,0.2)`,borderRadius:6,padding:"4px 10px",cursor:"pointer",marginLeft:"auto"}}>Remove</button>
+        </div>
+      </div>))}
+    </div>}
+  </div>);
+};
+
+const CalendarImageUpload=({entry,onUpdateEntry})=>{
+  const ref=useRef(null);
+  const handle=(e)=>{const f=e.target.files?.[0];if(!f)return;const r=new FileReader();r.onload=(ev)=>onUpdateEntry({...entry,image:ev.target.result});r.readAsDataURL(f);e.target.value="";};
+  return (<>
+    <button onClick={()=>ref.current?.click()} style={{marginTop:12,width:"100%",padding:"10px",fontSize:11,fontFamily:font,color:C.muted,background:"rgba(200,205,211,0.03)",border:`1px dashed ${C.border}`,borderRadius:8,cursor:"pointer"}}>📁 Add image to this post</button>
+    <input ref={ref} type="file" accept="image/*" onChange={handle} style={{display:"none"}}/>
+  </>);
+};
+
+// ─── Content Queue ───────────────────────────────────────────────────────────
+const ContentQueue=({items,onUpdate,onDelete})=>{
+  const scheduled=items.filter(i=>i.status==="scheduled").sort((a,b)=>a.date.localeCompare(b.date));
+  if(!scheduled.length) return null;
+  const QueueItem=({item})=> (<div style={{display:"flex",alignItems:"center",gap:12,padding:"10px 14px",background:"rgba(200,205,211,0.02)",borderRadius:8,border:`1px solid ${C.border}`}}>
+    <div style={{width:6,height:6,borderRadius:"50%",background:TYPE_COLORS[item.type],flexShrink:0}}/>
+    <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.preview}</div></div>
+    <span style={{fontSize:10,fontFamily:mono,color:C.dim,flexShrink:0}}>{item.date}</span>
+    <StatusBadge status={item.status}/>
+    <CopyBtn text={item.fullText||item.preview} label="Copy" onCopied={()=>onUpdate({...item,status:"published"})}/>
+    <button onClick={()=>onDelete(item.id)} title="Remove from schedule" style={{fontSize:11,fontFamily:mono,color:C.red,background:"none",border:`1px solid rgba(248,113,113,0.2)`,borderRadius:6,padding:"4px 10px",cursor:"pointer"}}>✕ Remove</button>
+  </div>);
+  return (<div style={{marginBottom:24}}>
+    <div style={{fontSize:11,fontWeight:600,color:C.accent,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8}}>Scheduled ({scheduled.length})</div>
+    <div style={{display:"flex",flexDirection:"column",gap:6}}>{scheduled.map(i=> <QueueItem key={i.id} item={i}/>)}</div>
+  </div>);
+};
+
+// ─── Image Generation (Hybrid: Card + AI + Upload) ───────────────────────────
+const CARD_TEMPLATES=[{id:"quote",label:"Quote Card"},{id:"stat",label:"Stat Highlight"},{id:"announce",label:"Announcement"}];
+
+const BrandCard=({text,template="quote"})=>{
+  const canvasRef=useRef(null);const width=1200,height=675;
+  const drawCard=useCallback(()=>{
+    const canvas=canvasRef.current;if(!canvas)return;const ctx2d=canvas.getContext("2d");
+    ctx2d.fillStyle="#0B0E11";ctx2d.fillRect(0,0,width,height);
+    ctx2d.fillStyle="#D9AA5A";
+    if(template==="quote")ctx2d.fillRect(60,60,4,height-120);
+    else if(template==="stat")ctx2d.fillRect(0,height-8,width,8);
+    else ctx2d.fillRect(60,60,width-120,4);
+    ctx2d.fillStyle="#D9AA5A";ctx2d.font="bold 18px 'DM Sans', sans-serif";
+    ctx2d.fillText("HONOROLL",template==="quote"?84:60,template==="announce"?100:height-40);
+    ctx2d.fillStyle="#E8ECEF";const fontSize=text.length>200?24:text.length>100?30:38;
+    ctx2d.font=`600 ${fontSize}px 'DM Sans', sans-serif`;
+    const maxWidth=width-160;const lineHeight=fontSize*1.5;const words=text.split(" ");let line="";let y=template==="announce"?160:160;
+    for(const word of words){const test=line+word+" ";if(ctx2d.measureText(test).width>maxWidth&&line){ctx2d.fillText(line.trim(),template==="quote"?84:80,y);y+=lineHeight;line=word+" ";}else{line=test;}}
+    ctx2d.fillText(line.trim(),template==="quote"?84:80,y);
+  },[text,template]);
+  useEffect(()=>{drawCard();},[drawCard]);
+  const download=()=>{const c=canvasRef.current;if(!c)return;const a=document.createElement("a");a.download=`honoroll-${template}.png`;a.href=c.toDataURL("image/png");a.click();};
+  return (<div><canvas ref={canvasRef} width={width} height={height} style={{width:"100%",height:"auto",aspectRatio:"16/9",borderRadius:8,border:`1px solid ${C.border}`,display:"block"}}/><div style={{display:"flex",gap:8,marginTop:8,justifyContent:"flex-end"}}><button onClick={download} style={{fontSize:11,fontFamily:mono,color:C.green,background:"none",border:`1px solid ${C.greenBdr}`,borderRadius:6,padding:"5px 14px",cursor:"pointer"}}>Download PNG</button></div></div>);
+};
+
+const AIArtwork=({text,brandAssets})=>{
+  const[svgCode,setSvgCode]=useState(null);const[loading,setLoading]=useState(false);const[error,setError]=useState("");
+  const[customPrompt,setCustomPrompt]=useState("");
+  const brandContext=brandAssets?.length?`\nBRAND ASSETS CONTEXT: ${brandAssets.map(a=>`${a.name}: ${a.description||"no description"}`).join("; ")}. Use these descriptions to inform the visual style and themes.`:"";
+  const generate=async()=>{
+    setLoading(true);setError("");
+    try{
+      const userPrompt=customPrompt?`Post text: ${text}\n\nAdditional image direction: ${customPrompt}${brandContext}`:`Post text: ${text}${brandContext}`;
+      const result=await callLLM(
+        `You generate SVG artwork for social media posts. Create a visually striking abstract SVG image that complements the given post text.
+CRITICAL DIMENSIONS: viewBox="0 0 1200 675" width="1200" height="675". 16:9 aspect ratio.
+Rules:
+- Dark background: fill entire area with #0B0E11
+- Primary: #D9AA5A (amber/gold), secondary: #5AB8D9 (blue), subtle: #D95A8C (pink)
+- Modern, minimal, abstract. Geometric shapes, gradients, flowing lines
+- NO text, NO letters, NO words, NO logos
+- NO clipPath, NO mask, NO filter, NO foreignObject
+- Use only: rect, circle, ellipse, line, polyline, polygon, path, linearGradient, radialGradient, defs, g, stop
+- Output ONLY raw SVG starting with <svg. No markdown, no backticks.
+- Start with: <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 675" width="1200" height="675">`,
+        userPrompt,2048);
+      const clean=result.replace(/```svg|```xml|```/g,"").trim();
+      if(!clean.startsWith("<svg")) throw new Error("Invalid SVG");
+      setSvgCode(clean);setLoading(false);
+    }catch(e){setError(e.message);setLoading(false);}
+  };
+  const downloadSvg=()=>{if(!svgCode)return;const b=new Blob([svgCode],{type:"image/svg+xml"});const a=document.createElement("a");a.download=`honoroll-art.svg`;a.href=URL.createObjectURL(b);a.click();};
+  const download=()=>{if(!svgCode)return;const b=new Blob([svgCode],{type:"image/svg+xml;charset=utf-8"});const url=URL.createObjectURL(b);const img=new window.Image();img.onload=()=>{const c=document.createElement("canvas");c.width=1200;c.height=675;c.getContext("2d").drawImage(img,0,0);URL.revokeObjectURL(url);const a=document.createElement("a");a.download="honoroll-art.png";a.href=c.toDataURL("image/png");a.click();};img.src=url;};
+  return (<div>
+    <div style={{marginBottom:10}}><textarea value={customPrompt} onChange={e=>setCustomPrompt(e.target.value)} placeholder="Optional: describe what you want in the image (e.g., 'golden dice on dark background', 'abstract network connections')..."
+      style={{width:"100%",background:"rgba(200,205,211,0.04)",border:`1px solid ${C.border}`,borderRadius:8,padding:"9px 12px",fontSize:12,fontFamily:font,color:C.text,outline:"none",resize:"none",minHeight:36,boxSizing:"border-box"}}/>
+    </div>
+    {!svgCode&&!loading&&!error&&<button onClick={generate} style={{width:"100%",padding:"14px",fontSize:12,fontFamily:font,fontWeight:500,color:C.muted,background:"rgba(200,205,211,0.03)",border:`1px dashed ${C.border}`,borderRadius:8,cursor:"pointer"}}>✦ Generate Artwork</button>}
+    {loading&&<div style={{padding:"24px",textAlign:"center",background:"rgba(200,205,211,0.03)",borderRadius:8,border:`1px solid ${C.border}`}}><div style={{display:"flex",justifyContent:"center",gap:6,marginBottom:10}}>{[0,1,2].map(i=> <div key={i} style={{width:6,height:6,borderRadius:"50%",background:C.purple,animation:`pulse 1.2s ease-in-out ${i*0.2}s infinite`}}/>)}</div><div style={{fontSize:12,color:C.muted}}>Creating artwork...</div></div>}
+    {error&&<div style={{fontSize:11,color:C.red,padding:"8px 12px",background:C.redSoft,borderRadius:6,marginBottom:8}}>{error} <button onClick={generate} style={{color:C.red,background:"none",border:"none",cursor:"pointer",textDecoration:"underline",fontSize:11}}>Retry</button></div>}
+    {svgCode&&<div><div style={{borderRadius:8,overflow:"hidden",border:`1px solid ${C.border}`,background:"#0B0E11",aspectRatio:"16/9",width:"100%",position:"relative"}}><div style={{position:"absolute",inset:0}} dangerouslySetInnerHTML={{__html:svgCode.replace(/<svg /,'<svg style="width:100%;height:100%;display:block" ')}}/></div>
+      <div style={{display:"flex",gap:8,marginTop:8,justifyContent:"flex-end"}}><button onClick={()=>{setSvgCode(null);generate();}} style={{fontSize:11,fontFamily:mono,color:C.muted,background:"none",border:`1px solid ${C.border}`,borderRadius:6,padding:"5px 14px",cursor:"pointer"}}>Regenerate</button><button onClick={downloadSvg} style={{fontSize:11,fontFamily:mono,color:C.blue,background:"none",border:`1px solid rgba(90,184,217,0.3)`,borderRadius:6,padding:"5px 14px",cursor:"pointer"}}>SVG</button><button onClick={download} style={{fontSize:11,fontFamily:mono,color:C.green,background:"none",border:`1px solid ${C.greenBdr}`,borderRadius:6,padding:"5px 14px",cursor:"pointer"}}>PNG</button></div>
+    </div>}
+  </div>);
+};
+
+const UploadImage=({onUpload})=>{
+  const ref=useRef(null);const[preview,setPreview]=useState(null);
+  const handle=(e)=>{const f=e.target.files?.[0];if(!f)return;const r=new FileReader();r.onload=(ev)=>{setPreview(ev.target.result);onUpload(ev.target.result);};r.readAsDataURL(f);};
+  return (<div>
+    {!preview?<button onClick={()=>ref.current?.click()} style={{width:"100%",padding:"14px",fontSize:12,fontFamily:font,fontWeight:500,color:C.muted,background:"rgba(200,205,211,0.03)",border:`1px dashed ${C.border}`,borderRadius:8,cursor:"pointer"}}>📁 Upload Image</button>
+    :<div><img src={preview} alt="Uploaded" style={{width:"100%",aspectRatio:"16/9",objectFit:"cover",borderRadius:8,border:`1px solid ${C.border}`,display:"block"}}/><div style={{display:"flex",gap:8,marginTop:8,justifyContent:"flex-end"}}><button onClick={()=>{setPreview(null);ref.current?.click();}} style={{fontSize:11,fontFamily:mono,color:C.muted,background:"none",border:`1px solid ${C.border}`,borderRadius:6,padding:"5px 14px",cursor:"pointer"}}>Replace</button></div></div>}
+    <input ref={ref} type="file" accept="image/*" onChange={handle} style={{display:"none"}}/>
+  </div>);
+};
+
+const ImagePanel=({text,show,onToggle,onImageSet,brandAssets})=>{
+  const[mode,setMode]=useState("card");const[template,setTemplate]=useState("quote");
+  if(!show) return (<button onClick={onToggle} style={{width:"100%",marginTop:10,padding:"8px",fontSize:11,fontFamily:font,color:C.muted,background:"none",border:`1px dashed ${C.border}`,borderRadius:8,cursor:"pointer"}}>+ Add Image</button>);
+  return (<div style={{marginTop:12,padding:"14px",background:"rgba(200,205,211,0.02)",borderRadius:10,border:`1px solid ${C.border}`,animation:"fadeIn 0.3s ease-out"}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+      <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>{[{id:"card",label:"Brand Card"},{id:"ai",label:"AI Artwork"},{id:"upload",label:"Upload"}].map(m=> <button key={m.id} onClick={()=>setMode(m.id)} style={{padding:"5px 14px",fontSize:11,fontFamily:font,fontWeight:mode===m.id?600:400,color:mode===m.id?C.bg:C.muted,background:mode===m.id?C.accent:"rgba(200,205,211,0.04)",border:mode===m.id?"none":`1px solid ${C.border}`,borderRadius:6,cursor:"pointer"}}>{m.label}</button>)}</div>
+      <button onClick={onToggle} style={{fontSize:14,color:C.dim,background:"none",border:"none",cursor:"pointer"}}>✕</button>
+    </div>
+    {mode==="card"&&<><div style={{display:"flex",gap:4,marginBottom:12}}>{CARD_TEMPLATES.map(t=> <button key={t.id} onClick={()=>setTemplate(t.id)} style={{padding:"4px 12px",fontSize:10,fontFamily:mono,color:template===t.id?C.accent:C.dim,background:template===t.id?C.accentSoft:"transparent",border:`1px solid ${template===t.id?C.accent:C.border}`,borderRadius:4,cursor:"pointer"}}>{t.label}</button>)}</div><BrandCard text={text} template={template}/></>}
+    {mode==="ai"&&<AIArtwork text={text} brandAssets={brandAssets}/>}
+    {mode==="upload"&&<UploadImage onUpload={(dataUrl)=>onImageSet&&onImageSet(dataUrl)}/>}
+  </div>);
+};
+
+// ─── Article Card (editable) ─────────────────────────────────────────────────
+const ArticleCard=({article,onUpdateBody,onUpdateHeadline,onSchedule,scheduledDate})=>{
+  const[editBody,setEditBody]=useState(false);const[bodyDraft,setBodyDraft]=useState(article.body||"");
+  const bodyRef=useRef(null);
+  const saveBody=()=>{onUpdateBody(bodyDraft);setEditBody(false);};
+  const insertEmojiBody=(emoji)=>{
+    const ta=bodyRef.current;if(!ta){setBodyDraft(bodyDraft+emoji);return;}
+    const start=ta.selectionStart;const end=ta.selectionEnd;
+    const newText=bodyDraft.slice(0,start)+emoji+bodyDraft.slice(end);
+    setBodyDraft(newText);
+    setTimeout(()=>{ta.focus();ta.setSelectionRange(start+emoji.length,start+emoji.length);ta.style.height="auto";ta.style.height=ta.scrollHeight+"px";},0);
+  };
+  return (<div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"24px 28px",marginBottom:40,animation:"fadeIn 0.4s ease-out"}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:20,flexWrap:"wrap",gap:8}}>
+      <div style={{display:"flex",alignItems:"center",gap:10}}><DraftBadge/>{article.wordCount&&<span style={{fontSize:11,fontFamily:mono,color:C.dim}}>~{article.wordCount} words</span>}</div>
+      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}><ScheduleBtn onSchedule={onSchedule} scheduledDate={scheduledDate}/><button onClick={()=>{if(editBody){saveBody();}else{setBodyDraft(article.body||"");setEditBody(true);}}} style={{fontSize:11,fontFamily:mono,color:editBody?C.accent:C.muted,background:"none",border:`1px solid ${editBody?C.accent:C.border}`,borderRadius:6,padding:"4px 12px",cursor:"pointer"}}>{editBody?"Save":"Edit"}</button><CopyBtn text={`${article.headline}\n\n${article.body}`}/></div>
+    </div>
+    <EditableText value={article.headline} onChange={onUpdateHeadline} style={{fontSize:20,fontWeight:700,letterSpacing:"-0.02em",marginBottom:20}}/>
+    {editBody?<div><textarea ref={bodyRef} value={bodyDraft} onChange={e=>{setBodyDraft(e.target.value);e.target.style.height="auto";e.target.style.height=e.target.scrollHeight+"px";}} style={{width:"100%",background:"rgba(200,205,211,0.06)",border:`1px solid rgba(217,170,90,0.3)`,borderRadius:8,padding:"14px",fontSize:14,fontFamily:font,color:C.bright,outline:"none",resize:"none",lineHeight:1.75,boxSizing:"border-box",minHeight:300}}/><div style={{display:"flex",gap:8,marginTop:8,justifyContent:"flex-end",alignItems:"center"}}><EmojiBtn onPick={insertEmojiBody}/><button onClick={()=>{setEditBody(false);setBodyDraft(article.body||"");}} style={{fontSize:11,fontFamily:mono,color:C.muted,background:"none",border:`1px solid ${C.border}`,borderRadius:6,padding:"4px 12px",cursor:"pointer"}}>Cancel</button><button onClick={saveBody} style={{fontSize:11,fontFamily:mono,color:C.bg,background:C.accent,border:"none",borderRadius:6,padding:"4px 12px",cursor:"pointer",fontWeight:600}}>Save</button></div></div>
+    :<div style={{fontSize:14,color:C.text,lineHeight:1.75}}>{article.body?.split("\n").map((line,i)=>{if(line.startsWith("## ")) return <h3 key={i} style={{fontSize:16,fontWeight:700,color:C.bright,marginTop:24,marginBottom:8,fontFamily:font}}>{line.replace("## ","")}</h3>;if(line.startsWith("### ")) return <h4 key={i} style={{fontSize:14,fontWeight:600,color:C.bright,marginTop:20,marginBottom:6,fontFamily:font}}>{line.replace("### ","")}</h4>;if(line.trim()==="") return <div key={i} style={{height:12}}/>;const parts=line.split(/(\*\*.*?\*\*)/g);return <p key={i} style={{marginBottom:8}}>{parts.map((part,j)=>part.startsWith("**")&&part.endsWith("**")?<strong key={j} style={{color:C.bright,fontWeight:600}}>{part.slice(2,-2)}</strong>:part)}</p>;})}</div>}
+  </div>);
+};
+
+// ─── Content Page ────────────────────────────────────────────────────────────
+const ContentPage=({analyticsData,contentState,setContentState,brandAssets,onUpdateAssets,contextFiles,onUpdateContextFiles,defaults})=>{
+  const ctx=buildMarketingContext(analyticsData);
+  const[tone,setTone]=useState(contentState.tone||defaults?.tone||"founder");
+  const{posts,thread,article,calendar}=contentState;
+  const setPosts=(p)=>setContentState(s=>({...s,posts:p}));
+  const setThread=(t)=>setContentState(s=>({...s,thread:t}));
+  const setArticle=(a)=>setContentState(s=>({...s,article:a}));
+  const addCalendar=(type,preview,fullText,image)=>{const entry={type,preview:preview.slice(0,60),fullText:fullText||preview,image:image||null,date:new Date().toISOString().split("T")[0],status:"draft",id:Date.now()};setContentState(s=>({...s,calendar:[...s.calendar,entry]}));return entry.id;};
+  const scheduleToDate=(type,preview,fullText,date,image)=>{
+    setContentState(s=>{
+      // Remove any existing scheduled entry that matches this content (reschedule case)
+      const filtered=s.calendar.filter(e=>!(e.status==="scheduled"&&e.type===type&&(e.fullText===fullText||e.preview===preview.slice(0,60))));
+      const entry={type,preview:preview.slice(0,60),fullText:fullText||preview,image:image||null,date,status:"scheduled",id:Date.now()};
+      return {...s,calendar:[...filtered,entry]};
+    });
+  };
+  const findScheduledDate=(type,fullText)=>{
+    const entry=calendar.find(e=>e.status==="scheduled"&&e.type===type&&e.fullText===fullText);
+    return entry?.date||null;
+  };
+  const updateCalendarEntry=(updated)=>setContentState(s=>({...s,calendar:s.calendar.map(e=>e.id===updated.id?updated:e)}));
+  const deleteCalendarEntry=(id)=>setContentState(s=>({...s,calendar:s.calendar.filter(e=>e.id!==id)}));
+  const updatePost=(idx,newText)=>{const updated=[...posts];updated[idx]={...updated[idx],text:newText,chars:newText.length};setPosts(updated);};
+  const updateThreadTweet=(idx,newText)=>{const updated=[...thread];updated[idx]={...updated[idx],tweet:newText,chars:newText.length};setThread(updated);};
+  const updateArticleBody=(newBody)=>setArticle({...article,body:newBody});
+  const updateArticleHeadline=(newH)=>setArticle({...article,headline:newH});
+  const[postLength,setPostLength]=useState(defaults?.postLength||"normal");
+  const[threadLength,setThreadLength]=useState(defaults?.threadLength||"normal");
+  const[articleLength,setArticleLength]=useState(defaults?.articleLength||"normal");
+  const[postsLoading,setPostsLoading]=useState(false);const[postsError,setPostsError]=useState("");
+  const[threadLoading,setThreadLoading]=useState(false);const[threadError,setThreadError]=useState("");
+  const[articleLoading,setArticleLoading]=useState(false);const[articleError,setArticleError]=useState("");
+  const userCtx=buildContextString(contextFiles);
+  const fullCtx=`${COMPETITOR_CONTEXT}${userCtx}\n\nANALYTICS DATA:\n${ctx.summary}`;
+
+  const genPosts=async()=>{setPostsLoading(true);setPostsError("");try{const r=await generateContent(makePrompt(X_POST_PROMPT,tone,postLength,"post"),fullCtx);setPosts(r.posts||[]);}catch(e){setPostsError(e.message);}finally{setPostsLoading(false);}};
+  const genThread=async()=>{setThreadLoading(true);setThreadError("");try{const r=await generateContent(makePrompt(X_THREAD_PROMPT,tone,threadLength,"thread"),fullCtx);setThread(r.thread||[]);}catch(e){setThreadError(e.message);}finally{setThreadLoading(false);}};
+  const genArticle=async()=>{setArticleLoading(true);setArticleError("");try{const r=await generateArticle(makePrompt(X_ARTICLE_PROMPT,tone,articleLength,"article"),fullCtx);setArticle(r);}catch(e){setArticleError(e.message);}finally{setArticleLoading(false);}};
+  const formatThread=(arr)=>arr.map((t,i)=>`${i+1}/${arr.length}\n${t.tweet}`).join("\n\n---\n\n");
+  const formatThreadTypefully=(arr)=>arr.map(t=>t.tweet).join("\n\n🧵\n\n");
+
+  const GenBtn=({onClick,loading,exists,color,children})=> (<button onClick={onClick} disabled={loading} style={{padding:"10px 24px",fontSize:14,fontWeight:600,fontFamily:font,cursor:"pointer",transition:"all 0.2s",borderRadius:10,border:"none",background:loading?"rgba(200,205,211,0.06)":exists?"rgba(200,205,211,0.06)":`linear-gradient(135deg,${color},${color}99)`,color:loading?C.muted:exists?C.muted:C.bg,opacity:loading?0.5:1}}>{loading?"Generating...":exists?"Regenerate":children}</button>);
+
+  return (<div style={{maxWidth:1280,margin:"0 auto",padding:"24px 20px"}}>
+    {/* Header */}
+    <Heading desc="Track content, schedule posts, preview before publishing.">Content Calendar</Heading>
+    <ContentCalendar history={calendar} onUpdateEntry={updateCalendarEntry} onDeleteEntry={deleteCalendarEntry}/>
+
+    {/* Queue */}
+    <Heading desc="Upcoming scheduled content and recent drafts.">Content Queue</Heading>
+    <ContentQueue items={calendar} onUpdate={updateCalendarEntry} onDelete={deleteCalendarEntry}/>
+
+    {/* Tone */}
+    <Heading desc="Sets the voice for all generators below.">Tone</Heading>
+    <ToneSelector value={tone} onChange={(t)=>{setTone(t);setContentState(s=>({...s,tone:t}));}}/>
+
+    {/* ─── X Posts ─── */}
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:12}}>
+      <Heading desc="Three tweet variants. Click text to edit, schedule to calendar.">𝕏 Post Drafts</Heading>
+      <div style={{display:"flex",gap:8,alignItems:"center"}}><LengthPicker value={postLength} onChange={setPostLength}/><GenBtn onClick={genPosts} loading={postsLoading} exists={!!posts} color={C.accent}>Generate Posts</GenBtn></div>
+    </div>
+    {!posts&&!postsLoading&&!postsError&&<div style={{background:C.surface,border:`1px dashed ${C.border}`,borderRadius:12,padding:"32px 24px",textAlign:"center",marginBottom:32}}><div style={{fontSize:24,marginBottom:8,opacity:0.4}}>𝕏</div><div style={{fontSize:13,color:C.muted}}>Generate 3 tweet variants</div></div>}
+    {postsLoading&&<div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"32px",textAlign:"center",marginBottom:32}}><div style={{display:"flex",justifyContent:"center",gap:6,marginBottom:12}}>{[0,1,2].map(i=> <div key={i} style={{width:8,height:8,borderRadius:"50%",background:C.accent,animation:`pulse 1.2s ease-in-out ${i*0.2}s infinite`}}/>)}</div><div style={{fontSize:13,color:C.text}}>Drafting tweets...</div></div>}
+    {postsError&&<div style={{background:C.redSoft,border:"1px solid rgba(248,113,113,0.15)",borderRadius:12,padding:"16px 20px",marginBottom:32,fontSize:13,color:C.red}}>{postsError}</div>}
+    {posts&&<div style={{display:"flex",flexDirection:"column",gap:12,marginBottom:40}}>{posts.map((p,i)=> (<div key={i} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"16px 20px",animation:`fadeIn 0.3s ease-out ${i*0.1}s both`}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,flexWrap:"wrap",gap:8}}>
+        <div style={{display:"flex",alignItems:"center",gap:8}}><DraftBadge/>{p.angle&&<span style={{fontSize:11,color:C.muted,fontFamily:mono}}>{p.angle}</span>}</div>
+        <div style={{display:"flex",alignItems:"center",gap:8}}><CharCount n={p.text?.length||0}/><ScheduleBtn onSchedule={(date)=>scheduleToDate("post",p.text,p.text,date)} scheduledDate={findScheduledDate("post",p.text)}/><CopyBtn text={p.text}/></div>
+      </div>
+      <EditableText value={p.text} onChange={(t)=>updatePost(i,t)} maxChars={280}/>
+    </div>))}</div>}
+
+    {/* ─── X Article ─── */}
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:12}}>
+      <Heading desc="Long-form article (400-800 words) for X.">𝕏 Article Draft</Heading>
+      <div style={{display:"flex",gap:8,alignItems:"center"}}><LengthPicker value={articleLength} onChange={setArticleLength}/><GenBtn onClick={genArticle} loading={articleLoading} exists={!!article} color={C.purple}>Generate Article</GenBtn></div>
+    </div>
+    {!article&&!articleLoading&&!articleError&&<div style={{background:C.surface,border:`1px dashed ${C.border}`,borderRadius:12,padding:"32px 24px",textAlign:"center",marginBottom:32}}><div style={{fontSize:24,marginBottom:8,opacity:0.4}}>📝</div><div style={{fontSize:13,color:C.muted}}>Generate a long-form article</div></div>}
+    {articleLoading&&<div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"32px",textAlign:"center",marginBottom:32}}><div style={{display:"flex",justifyContent:"center",gap:6,marginBottom:12}}>{[0,1,2].map(i=> <div key={i} style={{width:8,height:8,borderRadius:"50%",background:C.purple,animation:`pulse 1.2s ease-in-out ${i*0.2}s infinite`}}/>)}</div><div style={{fontSize:13,color:C.text}}>Writing article...</div><div style={{fontSize:11,color:C.dim,marginTop:4}}>10-15 seconds</div></div>}
+    {articleError&&<div style={{background:C.redSoft,border:"1px solid rgba(248,113,113,0.15)",borderRadius:12,padding:"16px 20px",marginBottom:32,fontSize:13,color:C.red}}>{articleError}</div>}
+    {article&&<ArticleCard article={article} onUpdateBody={updateArticleBody} onUpdateHeadline={updateArticleHeadline} onSchedule={(date)=>scheduleToDate("article",article.headline,`${article.headline}\n\n${article.body}`,date)} scheduledDate={findScheduledDate("article",`${article.headline}\n\n${article.body}`)}/>}
+
+    {/* ─── X Thread ─── */}
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:12}}>
+      <Heading desc="4-6 tweet thread. Click tweets to edit, schedule the whole thread.">𝕏 Thread Draft</Heading>
+      <div style={{display:"flex",gap:8,alignItems:"center"}}>{thread&&<ScheduleBtn onSchedule={(date)=>scheduleToDate("thread",thread[0]?.tweet||"",thread.map((t,i)=>`${i+1}. ${t.tweet}`).join("\n\n"),date)} scheduledDate={thread?findScheduledDate("thread",thread.map((t,i)=>`${i+1}. ${t.tweet}`).join("\n\n")):null}/>}<LengthPicker value={threadLength} onChange={setThreadLength}/><GenBtn onClick={genThread} loading={threadLoading} exists={!!thread} color={C.blue}>Generate Thread</GenBtn></div>
+    </div>
+    {!thread&&!threadLoading&&!threadError&&<div style={{background:C.surface,border:`1px dashed ${C.border}`,borderRadius:12,padding:"32px 24px",textAlign:"center",marginBottom:32}}><div style={{fontSize:24,marginBottom:8,opacity:0.4}}>🧵</div><div style={{fontSize:13,color:C.muted}}>Generate a multi-tweet thread</div></div>}
+    {threadLoading&&<div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"32px",textAlign:"center",marginBottom:32}}><div style={{display:"flex",justifyContent:"center",gap:6,marginBottom:12}}>{[0,1,2].map(i=> <div key={i} style={{width:8,height:8,borderRadius:"50%",background:C.blue,animation:`pulse 1.2s ease-in-out ${i*0.2}s infinite`}}/>)}</div><div style={{fontSize:13,color:C.text}}>Crafting thread...</div></div>}
+    {threadError&&<div style={{background:C.redSoft,border:"1px solid rgba(248,113,113,0.15)",borderRadius:12,padding:"16px 20px",marginBottom:32,fontSize:13,color:C.red}}>{threadError}</div>}
+    {thread&&<div style={{marginBottom:40}}>
+      <div style={{display:"flex",justifyContent:"flex-end",gap:8,marginBottom:12,flexWrap:"wrap"}}><CopyBtn text={formatThread(thread)} label="Copy numbered"/><CopyBtn text={formatThreadTypefully(thread)} label="Copy for Typefully"/></div>
+      {thread.map((t,i)=> (<div key={i} style={{display:"flex",gap:12,marginBottom:0}}><div style={{display:"flex",flexDirection:"column",alignItems:"center",width:24,flexShrink:0}}><div style={{width:24,height:24,borderRadius:"50%",background:C.blue,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,fontFamily:mono,color:C.bg,flexShrink:0}}>{i+1}</div>{i<thread.length-1&&<div style={{width:2,flex:1,background:"rgba(90,184,217,0.15)",marginTop:4,marginBottom:4}}/>}</div><div style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"14px 18px",marginBottom:12,animation:`fadeIn 0.3s ease-out ${i*0.1}s both`}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8,flexWrap:"wrap",gap:8}}><DraftBadge/><div style={{display:"flex",alignItems:"center",gap:8}}><CharCount n={t.tweet?.length||0}/><CopyBtn text={t.tweet}/></div></div><EditableText value={t.tweet} onChange={(txt)=>updateThreadTweet(i,txt)} maxChars={280}/></div></div>))}
+    </div>}
+
+    {/* Footer */}
+    <div style={{textAlign:"center",padding:"24px 0 16px",borderTop:`1px solid ${C.border}`,fontSize:12,color:"#374151",fontFamily:mono}}>Honoroll Dashboard v1.0</div>
+  </div>);
+};
+
+// ─── UTM Link Builder ────────────────────────────────────────────────────────
+const UTM_SOURCES=["twitter","x","telegram","email","newsletter","reddit","discord","blog","linkedin","facebook","direct"];
+const UTM_MEDIUMS=["social","email","referral","paid","organic","cpc","display","affiliate"];
+
+const UTM_TEMPLATES=[
+  {id:"twitter",label:"Twitter / X",emoji:"𝕏",source:"twitter",medium:"social"},
+  {id:"telegram",label:"Telegram",emoji:"✈️",source:"telegram",medium:"social"},
+  {id:"email",label:"Email",emoji:"✉️",source:"newsletter",medium:"email"},
+  {id:"custom",label:"Custom",emoji:"⚙️",source:"",medium:""},
+];
+
+// Auto-format: lowercase, replace spaces with underscores, strip special chars
+const formatUtm=(s)=>(s||"").toLowerCase().trim().replace(/\s+/g,"_").replace(/[^a-z0-9_-]/g,"");
+
+const buildUtmUrl=(base,source,medium,campaign)=>{
+  if(!base) return "";
+  try{
+    const url=new URL(base.includes("://")?base:`https://${base}`);
+    if(source) url.searchParams.set("utm_source",source);
+    if(medium) url.searchParams.set("utm_medium",medium);
+    if(campaign) url.searchParams.set("utm_campaign",campaign);
+    return url.toString();
+  }catch(e){
+    // Invalid URL, build manually
+    const params=[];
+    if(source) params.push(`utm_source=${encodeURIComponent(source)}`);
+    if(medium) params.push(`utm_medium=${encodeURIComponent(medium)}`);
+    if(campaign) params.push(`utm_campaign=${encodeURIComponent(campaign)}`);
+    return params.length?`${base}${base.includes("?")?"&":"?"}${params.join("&")}`:base;
+  }
+};
+
+const SourceMediumPicker=({value,onChange,options,placeholder})=>{
+  const[customMode,setCustomMode]=useState(false);
+  const isCustom=value&&!options.includes(value);
+  return (<div>
+    {!customMode&&!isCustom?(<select value={value} onChange={e=>{if(e.target.value==="__custom"){setCustomMode(true);onChange("");}else onChange(e.target.value);}}
+      style={{width:"100%",background:"rgba(200,205,211,0.05)",border:`1px solid ${C.border}`,borderRadius:8,padding:"10px 12px",fontSize:13,fontFamily:font,color:value?C.bright:C.muted,outline:"none",cursor:"pointer",appearance:"none",backgroundImage:"url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236B7280' stroke-width='2'><polyline points='6 9 12 15 18 9'/></svg>\")",backgroundRepeat:"no-repeat",backgroundPosition:"right 12px center",paddingRight:36}}>
+      <option value="">{placeholder}</option>
+      {options.map(o=> <option key={o} value={o}>{o}</option>)}
+      <option value="__custom">+ custom</option>
+    </select>)
+    :(<div style={{display:"flex",gap:6}}>
+      <input value={value} onChange={e=>onChange(formatUtm(e.target.value))} placeholder={placeholder} autoFocus
+        style={{flex:1,background:"rgba(200,205,211,0.05)",border:`1px solid rgba(217,170,90,0.3)`,borderRadius:8,padding:"10px 12px",fontSize:13,fontFamily:mono,color:C.bright,outline:"none"}}/>
+      <button onClick={()=>{setCustomMode(false);onChange("");}} style={{fontSize:11,fontFamily:mono,color:C.muted,background:"none",border:`1px solid ${C.border}`,borderRadius:8,padding:"0 14px",cursor:"pointer"}}>↩ Back</button>
+    </div>)}
+  </div>);
+};
+
+const LiveUrlPreview=({url})=>(<div style={{background:"rgba(200,205,211,0.03)",border:`1px solid ${C.border}`,borderRadius:8,padding:"12px 14px",fontSize:12,fontFamily:mono,color:url?C.bright:C.dim,wordBreak:"break-all",lineHeight:1.6,minHeight:42}}>
+  {url||<span style={{color:C.dim,fontStyle:"italic",fontFamily:font}}>Live preview will appear here as you type</span>}
+</div>);
+
+const UtmHistoryItem=({item,onDelete})=>{
+  const[expanded,setExpanded]=useState(false);
+  return (<div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,padding:"14px 18px",marginBottom:8}}>
+    <div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+      <div style={{flex:1,minWidth:200}}>
+        <div style={{fontSize:13,fontWeight:600,color:C.bright,marginBottom:4}}>{item.label}</div>
+        <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+          <span style={{fontSize:9,fontFamily:mono,color:C.accent,padding:"2px 7px",background:C.accentSoft,borderRadius:3}}>{item.source}</span>
+          <span style={{fontSize:9,fontFamily:mono,color:C.blue,padding:"2px 7px",background:"rgba(90,184,217,0.08)",borderRadius:3}}>{item.medium}</span>
+          {item.campaign&&<span style={{fontSize:9,fontFamily:mono,color:C.purple,padding:"2px 7px",background:"rgba(176,90,217,0.08)",borderRadius:3}}>{item.campaign}</span>}
+        </div>
+      </div>
+      <span style={{fontSize:10,fontFamily:mono,color:C.dim}}>{new Date(item.createdAt).toLocaleDateString()}</span>
+      <button onClick={()=>setExpanded(!expanded)} style={{fontSize:11,fontFamily:mono,color:C.muted,background:"none",border:`1px solid ${C.border}`,borderRadius:6,padding:"4px 10px",cursor:"pointer"}}>{expanded?"Hide":"View"}</button>
+      <CopyBtn text={item.url} label="Copy"/>
+      <button onClick={()=>window.open(item.url,"_blank")} style={{fontSize:11,fontFamily:mono,color:C.blue,background:"none",border:`1px solid rgba(90,184,217,0.3)`,borderRadius:6,padding:"4px 10px",cursor:"pointer"}}>↗ Open</button>
+      <button onClick={()=>onDelete(item.id)} style={{fontSize:11,fontFamily:mono,color:C.red,background:"none",border:`1px solid rgba(248,113,113,0.2)`,borderRadius:6,padding:"4px 10px",cursor:"pointer"}}>✕</button>
+    </div>
+    {expanded&&<div style={{marginTop:10,paddingTop:10,borderTop:`1px solid ${C.border}`,fontSize:11,fontFamily:mono,color:C.text,wordBreak:"break-all",lineHeight:1.6,animation:"fadeIn 0.2s ease-out"}}>{item.url}</div>}
+  </div>);
+};
+
+const UtmPage=({utmHistory,onUpdateHistory})=>{
+  const[destUrl,setDestUrl]=useState("");
+  const[source,setSource]=useState("");
+  const[medium,setMedium]=useState("");
+  const[campaign,setCampaign]=useState("");
+  const[customLabel,setCustomLabel]=useState("");
+  const[justSaved,setJustSaved]=useState(false);
+  const[search,setSearch]=useState("");
+  const[filterSource,setFilterSource]=useState("");
+
+  const liveUrl=buildUtmUrl(destUrl,source,medium,campaign);
+  const isComplete=destUrl&&source&&medium&&campaign;
+
+  const applyTemplate=(tpl)=>{setSource(tpl.source);setMedium(tpl.medium);};
+
+  const save=()=>{
+    if(!isComplete) return;
+    const autoLabel=`${source} / ${medium} / ${campaign}`;
+    const entry={id:Date.now(),url:liveUrl,destUrl,source,medium,campaign,label:customLabel||autoLabel,createdAt:Date.now()};
+    onUpdateHistory([entry,...utmHistory]);
+    // Copy to clipboard
+    try{
+      if(navigator.clipboard?.writeText) navigator.clipboard.writeText(liveUrl);
+      else{const ta=document.createElement("textarea");ta.value=liveUrl;ta.style.cssText="position:fixed;left:-9999px";document.body.appendChild(ta);ta.select();document.execCommand("copy");document.body.removeChild(ta);}
+    }catch(e){}
+    setJustSaved(true);
+    setTimeout(()=>{setDestUrl("");setSource("");setMedium("");setCampaign("");setCustomLabel("");setJustSaved(false);},1500);
+  };
+
+  const deleteEntry=(id)=>onUpdateHistory(utmHistory.filter(h=>h.id!==id));
+
+  const filtered=utmHistory.filter(h=>{
+    const q=search.toLowerCase();
+    const matchSearch=!q||h.label.toLowerCase().includes(q)||h.url.toLowerCase().includes(q)||h.campaign.toLowerCase().includes(q);
+    const matchSource=!filterSource||h.source===filterSource;
+    return matchSearch&&matchSource;
+  });
+
+  const uniqueSources=[...new Set(utmHistory.map(h=>h.source))];
+
+  return (<div style={{maxWidth:1280,margin:"0 auto",padding:"24px 20px"}}>
+    {/* Templates */}
+    <Heading desc="Click a template to pre-fill source and medium, then add your campaign name.">Quick Templates</Heading>
+    <div style={{display:"flex",gap:8,marginBottom:24,flexWrap:"wrap"}}>
+      {UTM_TEMPLATES.map(tpl=>(<button key={tpl.id} onClick={()=>applyTemplate(tpl)} style={{padding:"10px 20px",fontSize:13,fontFamily:font,fontWeight:500,color:C.text,background:"rgba(200,205,211,0.04)",border:`1px solid ${C.border}`,borderRadius:10,cursor:"pointer",transition:"all 0.15s",display:"flex",alignItems:"center",gap:8}} onMouseEnter={e=>{e.currentTarget.style.borderColor=C.accent;e.currentTarget.style.background="rgba(217,170,90,0.04)";}} onMouseLeave={e=>{e.currentTarget.style.borderColor=C.border;e.currentTarget.style.background="rgba(200,205,211,0.04)";}}>
+        <span style={{fontSize:16}}>{tpl.emoji}</span><span>{tpl.label}</span>
+      </button>))}
+    </div>
+
+    {/* Builder Form */}
+    <Heading desc="Three required fields: source (where), medium (type), campaign (what for). All values are auto-formatted to lowercase with underscores for consistency.">Build a Link</Heading>
+    <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"24px 26px",marginBottom:32}}>
+      <div style={{display:"grid",gap:16}}>
+        {/* Destination URL */}
+        <div>
+          <label style={{display:"block",fontSize:11,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Destination URL <span style={{color:C.red}}>*</span></label>
+          <input value={destUrl} onChange={e=>setDestUrl(e.target.value.trim())} placeholder="https://honoroll.com/beta"
+            style={{width:"100%",background:"rgba(200,205,211,0.05)",border:`1px solid ${destUrl?"rgba(217,170,90,0.3)":C.border}`,borderRadius:8,padding:"10px 12px",fontSize:13,fontFamily:mono,color:C.bright,outline:"none",boxSizing:"border-box"}}/>
+        </div>
+
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(200px, 1fr))",gap:16}}>
+          <div>
+            <label style={{display:"block",fontSize:11,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Source <span style={{color:C.red}}>*</span> <span style={{textTransform:"none",fontWeight:400,color:C.dim,fontSize:10}}>where the link came from</span></label>
+            <SourceMediumPicker value={source} onChange={setSource} options={UTM_SOURCES} placeholder="Select source..."/>
+          </div>
+          <div>
+            <label style={{display:"block",fontSize:11,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Medium <span style={{color:C.red}}>*</span> <span style={{textTransform:"none",fontWeight:400,color:C.dim,fontSize:10}}>type of channel</span></label>
+            <SourceMediumPicker value={medium} onChange={setMedium} options={UTM_MEDIUMS} placeholder="Select medium..."/>
+          </div>
+          <div>
+            <label style={{display:"block",fontSize:11,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Campaign <span style={{color:C.red}}>*</span> <span style={{textTransform:"none",fontWeight:400,color:C.dim,fontSize:10}}>what it's for</span></label>
+            <input value={campaign} onChange={e=>setCampaign(formatUtm(e.target.value))} placeholder="closed_beta_launch"
+              style={{width:"100%",background:"rgba(200,205,211,0.05)",border:`1px solid ${campaign?"rgba(217,170,90,0.3)":C.border}`,borderRadius:8,padding:"10px 12px",fontSize:13,fontFamily:mono,color:C.bright,outline:"none",boxSizing:"border-box"}}/>
+          </div>
+        </div>
+
+        {/* Optional label */}
+        <div>
+          <label style={{display:"block",fontSize:11,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Custom Label <span style={{textTransform:"none",fontWeight:400,color:C.dim,fontSize:10}}>optional, defaults to source / medium / campaign</span></label>
+          <input value={customLabel} onChange={e=>setCustomLabel(e.target.value)} placeholder="Leave blank for auto-generated label"
+            style={{width:"100%",background:"rgba(200,205,211,0.05)",border:`1px solid ${C.border}`,borderRadius:8,padding:"10px 12px",fontSize:13,fontFamily:font,color:C.bright,outline:"none",boxSizing:"border-box"}}/>
+        </div>
+
+        {/* Live Preview */}
+        <div>
+          <label style={{display:"block",fontSize:11,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Live Preview</label>
+          <LiveUrlPreview url={liveUrl}/>
+        </div>
+
+        {/* Generate button */}
+        <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
+          <button onClick={save} disabled={!isComplete} style={{padding:"12px 28px",fontSize:14,fontWeight:600,fontFamily:font,color:isComplete?C.bg:C.muted,background:justSaved?C.green:isComplete?`linear-gradient(135deg,${C.accent},#E8C06A)`:"rgba(200,205,211,0.06)",border:"none",borderRadius:10,cursor:isComplete?"pointer":"not-allowed",transition:"all 0.2s",opacity:isComplete?1:0.5}}>
+            {justSaved?"✓ Saved & Copied":"Generate & Save"}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    {/* History */}
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:12}}>
+      <Heading desc={`${utmHistory.length} link${utmHistory.length===1?"":"s"} created. Click View to see the full URL, Copy to clipboard, or Open to test it.`}>Link History</Heading>
+      {utmHistory.length>0&&<div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search links..."
+          style={{background:"rgba(200,205,211,0.05)",border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 12px",fontSize:12,fontFamily:font,color:C.bright,outline:"none",width:180}}/>
+        <select value={filterSource} onChange={e=>setFilterSource(e.target.value)}
+          style={{background:"rgba(200,205,211,0.05)",border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 12px",fontSize:12,fontFamily:font,color:filterSource?C.bright:C.muted,outline:"none",cursor:"pointer"}}>
+          <option value="">All sources</option>
+          {uniqueSources.map(s=> <option key={s} value={s}>{s}</option>)}
+        </select>
+      </div>}
+    </div>
+    {utmHistory.length===0?(<div style={{background:C.surface,border:`1px dashed ${C.border}`,borderRadius:12,padding:"40px 24px",textAlign:"center"}}>
+      <div style={{fontSize:32,marginBottom:12,opacity:0.4}}>🔗</div>
+      <div style={{fontSize:14,color:C.muted,marginBottom:6}}>No links yet</div>
+      <div style={{fontSize:12,color:C.dim}}>Build your first UTM link above</div>
+    </div>)
+    :filtered.length===0?(<div style={{background:C.surface,border:`1px dashed ${C.border}`,borderRadius:12,padding:"24px",textAlign:"center",fontSize:13,color:C.muted}}>No links match your filters</div>)
+    :(<div>{filtered.map(item=> <UtmHistoryItem key={item.id} item={item} onDelete={deleteEntry}/>)}</div>)
+    }
+
+    {/* Footer */}
+    <div style={{textAlign:"center",padding:"24px 0 16px",borderTop:`1px solid ${C.border}`,fontSize:12,color:"#374151",fontFamily:mono,marginTop:32}}>Honoroll Dashboard v1.0</div>
+  </div>);
+};
+
+// ─── Header (Logo + Tabs + Settings + Avatar) ────────────────────────────────
+const Header=({active,onChange,onSettings,settingsActive})=>{
+  const TABS=[{id:"analytics",label:"Analytics"},{id:"content",label:"Content"},{id:"utm",label:"UTM Links"}];
+  return (<div style={{background:"rgba(10,12,15,0.6)",backdropFilter:"blur(8px)",borderBottom:`1px solid ${C.border}`,position:"sticky",top:0,zIndex:40}}>
+    <div style={{maxWidth:1280,margin:"0 auto",padding:"14px 20px",display:"flex",alignItems:"center",gap:24,flexWrap:"wrap"}}>
+      {/* Logo */}
+      <div style={{display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
+        <div style={{width:28,height:28,borderRadius:8,background:`linear-gradient(135deg,${C.accent},#E8C06A)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:700,color:C.bg}}>H</div>
+        <div style={{fontSize:16,fontWeight:700,color:C.bright,letterSpacing:"-0.01em"}}>Honoroll</div>
+      </div>
+      {/* Tabs */}
+      <div style={{display:"flex",gap:6,flex:1,flexWrap:"wrap"}}>
+        {TABS.map(tab=> (<button key={tab.id} onClick={()=>onChange(tab.id)} style={{padding:"9px 22px",fontSize:13,fontWeight:600,fontFamily:font,color:active===tab.id&&!settingsActive?C.bg:C.muted,cursor:"pointer",transition:"all 0.2s",background:active===tab.id&&!settingsActive?`linear-gradient(135deg,${C.accent},#E8C06A)`:"rgba(200,205,211,0.04)",border:active===tab.id&&!settingsActive?"none":`1px solid ${C.border}`,borderRadius:8,letterSpacing:"0.02em"}}>{tab.label}</button>))}
+      </div>
+      {/* Settings */}
+      <button onClick={onSettings} title="Settings" style={{width:36,height:36,borderRadius:8,background:settingsActive?C.accentSoft:"rgba(200,205,211,0.04)",border:`1px solid ${settingsActive?C.accent:C.border}`,color:settingsActive?C.accent:C.muted,cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center",transition:"all 0.15s",flexShrink:0}}>⚙</button>
+    </div>
+  </div>);
+};
+
+// ─── Settings Page ───────────────────────────────────────────────────────────
+const SETTINGS_SECTIONS=[
+  {id:"context",label:"Context Files",desc:"Files informing AI generation"},
+  {id:"brand",label:"Brand Assets",desc:"Logos, marks, visual references"},
+  {id:"integrations",label:"Integrations",desc:"API keys and connected services"},
+  {id:"site",label:"Site",desc:"Domain and analytics source"},
+  {id:"defaults",label:"Defaults",desc:"Default tone, length, generation settings"},
+];
+
+const SettingsPage=({contextFiles,onUpdateContextFiles,brandAssets,onUpdateAssets,defaults,onUpdateDefaults})=>{
+  const[section,setSection]=useState("context");
+  const[showContext,setShowContext]=useState(true);
+  const[showAssets,setShowAssets]=useState(true);
+
+  return (<div style={{maxWidth:1280,margin:"0 auto",padding:"24px 20px"}}>
+    <div style={{marginBottom:24}}>
+      <h1 style={{fontFamily:font,fontSize:24,fontWeight:700,color:C.bright,letterSpacing:"-0.02em",margin:0}}>Settings</h1>
+      <div style={{fontSize:13,color:C.muted,marginTop:4}}>Manage context, brand, integrations, and defaults.</div>
+    </div>
+    <div style={{display:"grid",gridTemplateColumns:"220px 1fr",gap:24,alignItems:"flex-start"}}>
+      {/* Sub-nav */}
+      <div style={{display:"flex",flexDirection:"column",gap:4,position:"sticky",top:80}}>
+        {SETTINGS_SECTIONS.map(s=> (<button key={s.id} onClick={()=>setSection(s.id)} style={{textAlign:"left",padding:"10px 14px",fontSize:13,fontWeight:section===s.id?600:500,fontFamily:font,color:section===s.id?C.bright:C.muted,background:section===s.id?"rgba(217,170,90,0.06)":"transparent",border:section===s.id?`1px solid ${C.accentSoft}`:`1px solid transparent`,borderLeft:section===s.id?`3px solid ${C.accent}`:"3px solid transparent",borderRadius:8,cursor:"pointer",display:"block",transition:"all 0.15s"}}>
+          <div style={{whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{s.label}</div>
+        </button>))}
+      </div>
+      {/* Content */}
+      <div style={{minWidth:0}}>
+        {section==="context"&&(<div>
+          <Heading desc="Files informing AI generation across Analytics insights and content drafts. Toggle each on/off to control what's active.">Context Files</Heading>
+          <ContextFilesPanel files={contextFiles} onUpdate={onUpdateContextFiles} show={true} onToggle={()=>{}} hideClose={true}/>
+        </div>)}
+        {section==="brand"&&(<div>
+          <Heading desc="Upload logos, brand marks, and visual references. Descriptions inform AI artwork generation.">Brand Assets</Heading>
+          <BrandAssetsPanel assets={brandAssets} onUpdate={onUpdateAssets} show={true} onToggle={()=>{}} hideClose={true}/>
+        </div>)}
+        {section==="integrations"&&(<div>
+          <Heading desc="Connected services and API keys.">Integrations</Heading>
+          <div style={{display:"grid",gap:12}}>
+            {[
+              {name:"Umami Cloud",desc:"Privacy-friendly analytics",status:"connected",color:C.green},
+              {name:"Groq AI",desc:"Llama 3.3 70B for content & insights",status:"connected",color:C.green},
+              {name:"PageSpeed Insights",desc:"Performance & Core Web Vitals",status:"connected",color:C.green},
+              {name:"SEO Score API",desc:"82-check SEO audit",status:"connected",color:C.green},
+              {name:"Telegram Bot",desc:"Funnel attribution & community management",status:"coming_soon",color:C.dim},
+              {name:"X / Twitter Posting",desc:"Automated post scheduling",status:"coming_soon",color:C.dim},
+            ].map((int,i)=>(<div key={i} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,padding:"14px 18px",display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+              <div style={{flex:1,minWidth:200}}>
+                <div style={{fontSize:14,fontWeight:600,color:C.bright,marginBottom:2}}>{int.name}</div>
+                <div style={{fontSize:11,color:C.dim}}>{int.desc}</div>
+              </div>
+              <span style={{fontSize:10,fontWeight:600,fontFamily:mono,color:int.color,padding:"3px 10px",background:`${int.color}15`,border:`1px solid ${int.color}30`,borderRadius:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>{int.status==="connected"?"● Connected":"○ Coming soon"}</span>
+            </div>))}
+          </div>
+        </div>)}
+        {section==="site"&&(<div>
+          <Heading desc="Domain and analytics tracking source.">Site</Heading>
+          <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"22px 24px"}}>
+            <div style={{display:"grid",gap:14}}>
+              <div>
+                <label style={{display:"block",fontSize:11,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Site Name</label>
+                <input value="My Website" disabled style={{width:"100%",background:"rgba(200,205,211,0.04)",border:`1px solid ${C.border}`,borderRadius:8,padding:"10px 12px",fontSize:13,fontFamily:font,color:C.text,outline:"none",boxSizing:"border-box",cursor:"not-allowed"}}/>
+              </div>
+              <div>
+                <label style={{display:"block",fontSize:11,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Domain</label>
+                <input value="example.com" disabled style={{width:"100%",background:"rgba(200,205,211,0.04)",border:`1px solid ${C.border}`,borderRadius:8,padding:"10px 12px",fontSize:13,fontFamily:mono,color:C.text,outline:"none",boxSizing:"border-box",cursor:"not-allowed"}}/>
+              </div>
+              <div>
+                <label style={{display:"block",fontSize:11,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Mock data mode</label>
+                <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",background:"rgba(217,170,90,0.04)",border:`1px solid ${C.accentSoft}`,borderRadius:8}}>
+                  <span style={{fontSize:12,color:C.accent,fontFamily:mono}}>● Mock data active</span>
+                  <span style={{fontSize:11,color:C.dim}}>Switch off when site goes live</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>)}
+        {section==="defaults"&&(<div>
+          <Heading desc="Default values for new content generations.">Defaults</Heading>
+          <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"22px 24px"}}>
+            <div style={{display:"grid",gap:18}}>
+              <div>
+                <label style={{display:"block",fontSize:11,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Default tone</label>
+                <ToneSelector value={defaults.tone} onChange={t=>onUpdateDefaults({...defaults,tone:t})}/>
+              </div>
+              <div>
+                <label style={{display:"block",fontSize:11,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Default post length</label>
+                <LengthPicker value={defaults.postLength} onChange={l=>onUpdateDefaults({...defaults,postLength:l})}/>
+              </div>
+              <div>
+                <label style={{display:"block",fontSize:11,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Default thread length</label>
+                <LengthPicker value={defaults.threadLength} onChange={l=>onUpdateDefaults({...defaults,threadLength:l})}/>
+              </div>
+              <div>
+                <label style={{display:"block",fontSize:11,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Default article length</label>
+                <LengthPicker value={defaults.articleLength} onChange={l=>onUpdateDefaults({...defaults,articleLength:l})}/>
+              </div>
+            </div>
+          </div>
+        </div>)}
+      </div>
+    </div>
+    {/* Footer */}
+    <div style={{textAlign:"center",padding:"40px 0 16px",borderTop:`1px solid ${C.border}`,fontSize:12,color:"#374151",fontFamily:mono,marginTop:32}}>Honoroll Dashboard v1.0</div>
+  </div>);
+};
+
+// ─── Tab Navigation ──────────────────────────────────────────────────────────
+// ─── App ─────────────────────────────────────────────────────────────────────
+const KEYS={key:null,region:null,seoKey:null,groqKey:null};
+const MOCK_SITE={id:"mock",name:"My Website",domain:"example.com"};
+const MOCK_DATA=(()=>{
+  const hourly=Array.from({length:17},(_,i)=>({label:`${i.toString().padStart(2,"0")}:00`,pageviews:Math.floor(Math.random()*200+(i>6&&i<16?120:30)),sessions:Math.floor(Math.random()*80+(i>6&&i<16?50:10))}));
+  const evtNames=["cta-click","signup-form","docs-search"];
+  const evtSeries=Array.from({length:17},(_,i)=>{const o={label:`${i.toString().padStart(2,"0")}:00`};evtNames.forEach(n=>{o[n]=Math.floor(Math.random()*20+3);});return o;});
+  return {statsToday:{pageviews:2847,visitors:1203,visits:1587,bounces:894,totaltime:4839210},statsYesterday:{pageviews:2412,visitors:1089,visits:1421,bounces:834,totaltime:4102380},active:5,timeSeries:hourly,unit:"hour",
+    pages:[{name:"/",value:842},{name:"/pricing",value:421},{name:"/docs/getting-started",value:318},{name:"/blog/analytics-guide",value:267},{name:"/features",value:198},{name:"/about",value:145},{name:"/contact",value:112},{name:"/changelog",value:89}],
+    referrers:[{name:"google.com",value:534},{name:"twitter.com",value:213},{name:"(direct)",value:189},{name:"github.com",value:156},{name:"reddit.com",value:98},{name:"hn.algolia.com",value:67}],
+    countries:[{name:"United States",code:"US",value:412},{name:"Germany",code:"DE",value:198},{name:"United Kingdom",code:"GB",value:167},{name:"France",code:"FR",value:112},{name:"Slovenia",code:"SI",value:89},{name:"Canada",code:"CA",value:78},{name:"Netherlands",code:"NL",value:62},{name:"Japan",code:"JP",value:45},{name:"Australia",code:"AU",value:28},{name:"Brazil",code:"BR",value:12}],
+    browsers:[{name:"Chrome",value:612},{name:"Safari",value:298},{name:"Firefox",value:178},{name:"Edge",value:89},{name:"Arc",value:26}],
+    devices:[{name:"Desktop",value:824},{name:"Mobile",value:312},{name:"Tablet",value:67}],
+    os:[{name:"macOS",value:489},{name:"Windows",value:387},{name:"iOS",value:178},{name:"Linux",value:98},{name:"Android",value:51}],
+    events:[{name:"cta-click",value:234},{name:"signup-form",value:156},{name:"docs-search",value:98},{name:"pricing-toggle",value:67},{name:"newsletter-subscribe",value:45}],
+    eventSeries:evtSeries,topEventNames:evtNames,
+    channels:[{name:"Organic Search",value:534},{name:"Direct",value:312},{name:"Social",value:213},{name:"Referral",value:156},{name:"Email",value:89}],
+    pageSpeed:{performance:72,seo:91,accessibility:88,vitals:{LCP:{value:"2.4s",rating:"good"},FCP:{value:"1.1s",rating:"good"},CLS:{value:"0.08",rating:"good"},TTFB:{value:"0.6s",rating:"good"},INP:{value:"210ms",rating:"needs-improvement"}}},
+    seoAudit:{score:74,grade:"B",priorities:[{issue:"30 images missing alt text",severity:"warning"},{issue:"No structured data (JSON-LD) found",severity:"warning"},{issue:"Meta description too short (78 chars)",severity:"info"},{issue:"H1 tag missing on 2 pages",severity:"warning"}]}};
+})();
+
+function App(){
+  const USE_MOCK=false;
+  const[site]=useState(MOCK_SITE);
+  const[tab,setTab]=useState("analytics");
+  const[showSettings,setShowSettings]=useState(false);
+  const[rangeId,setRangeId]=useState("24h");
+  const[compareMode,setCompareMode]=useState("previous");
+  const[contentState,setContentState]=useState({posts:null,thread:null,article:null,calendar:[],tone:"founder"});
+  const[brandAssets,setBrandAssets]=useState(()=>{
+    try{const s=typeof localStorage!=="undefined"?localStorage.getItem("honoroll_brand_assets"):null;return s?JSON.parse(s):[];}catch(e){return[];}
+  });
+  useEffect(()=>{try{if(typeof localStorage!=="undefined")localStorage.setItem("honoroll_brand_assets",JSON.stringify(brandAssets));}catch(e){}},[brandAssets]);
+  const[utmHistory,setUtmHistory]=useState(()=>{
+    try{const s=typeof localStorage!=="undefined"?localStorage.getItem("honoroll_utm_history"):null;return s?JSON.parse(s):[];}catch(e){return[];}
+  });
+  useEffect(()=>{try{if(typeof localStorage!=="undefined")localStorage.setItem("honoroll_utm_history",JSON.stringify(utmHistory));}catch(e){}},[utmHistory]);
+  const[contextFiles,setContextFiles]=useState(()=>{
+    try{const stored=typeof localStorage!=="undefined"?localStorage.getItem("honoroll_context_files"):null;return stored?JSON.parse(stored):[];}catch(e){return[];}
+  });
+  useEffect(()=>{try{if(typeof localStorage!=="undefined")localStorage.setItem("honoroll_context_files",JSON.stringify(contextFiles));}catch(e){}},[contextFiles]);
+  const[defaults,setDefaults]=useState(()=>{
+    try{const s=typeof localStorage!=="undefined"?localStorage.getItem("honoroll_defaults"):null;return s?JSON.parse(s):{tone:"founder",postLength:"normal",threadLength:"normal",articleLength:"normal"};}catch(e){return{tone:"founder",postLength:"normal",threadLength:"normal",articleLength:"normal"};}
+  });
+  useEffect(()=>{try{if(typeof localStorage!=="undefined")localStorage.setItem("honoroll_defaults",JSON.stringify(defaults));}catch(e){}},[defaults]);
+
+  const handleTabChange=(t)=>{setShowSettings(false);setTab(t);};
+  const handleSettings=()=>setShowSettings(s=>!s);
+
+  return (<div style={{fontFamily:font,background:C.bg,color:C.text,minHeight:"100vh"}}>
+    <Header active={tab} onChange={handleTabChange} onSettings={handleSettings} settingsActive={showSettings}/>
+    <div>
+      {showSettings?(<div style={{animation:"fadeIn 0.3s ease-out"}}><SettingsPage contextFiles={contextFiles} onUpdateContextFiles={setContextFiles} brandAssets={brandAssets} onUpdateAssets={setBrandAssets} defaults={defaults} onUpdateDefaults={setDefaults}/></div>)
+      :(<>
+        {tab==="analytics"&&<div style={{animation:"fadeIn 0.3s ease-out"}}><Dashboard cfg={KEYS} site={site} useMock={USE_MOCK} onSettings={handleSettings} rangeId={rangeId} onRangeChange={setRangeId} compareMode={compareMode} onCompareChange={setCompareMode} contextFiles={contextFiles}/></div>}
+        {tab==="content"&&<div style={{animation:"fadeIn 0.3s ease-out"}}><ContentPage analyticsData={MOCK_DATA} contentState={contentState} setContentState={setContentState} brandAssets={brandAssets} onUpdateAssets={setBrandAssets} contextFiles={contextFiles} onUpdateContextFiles={setContextFiles} defaults={defaults}/></div>}
+        {tab==="utm"&&<div style={{animation:"fadeIn 0.3s ease-out"}}><UtmPage utmHistory={utmHistory} onUpdateHistory={setUtmHistory}/></div>}
+      </>)}
+    </div>
+  </div>);
+}
+
+    ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));
+  </script>
+</body>
+</html>
