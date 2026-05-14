@@ -294,9 +294,12 @@ Rules:
 - Be data-driven. Reference actual numbers. Keep it concise.
 - Return raw JSON only.`;
 
+let ACTIVE_AI_MODEL="llama-3.3-70b-versatile";
+function setActiveAIModel(m){if(typeof m==="string"&&m)ACTIVE_AI_MODEL=m;}
+
 async function callLLM(systemPrompt,userMessage,maxTokens=4096){
   const res=await fetch("/api/groq",{method:"POST",headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({system:systemPrompt,user:userMessage,max_tokens:maxTokens,temperature:0.7})});
+    body:JSON.stringify({system:systemPrompt,user:userMessage,max_tokens:maxTokens,temperature:0.7,model:ACTIVE_AI_MODEL})});
   if(!res.ok){
     let msg="";
     try{const j=await res.json();msg=j.error||"";}catch(e){msg=await res.text().catch(()=>"");}
@@ -1856,6 +1859,19 @@ const SettingsPage=({ctxFiles,brandAssets,defaults,onUpdateDefaults})=>{
                 <label style={{display:"block",fontSize:11,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Default article length</label>
                 <LengthPicker value={defaults.articleLength} onChange={l=>onUpdateDefaults({articleLength:l})}/>
               </div>
+              <div>
+                <label style={{display:"block",fontSize:11,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>AI model</label>
+                <div style={{display:"flex",flexDirection:"column",gap:8}}>{AI_MODELS.map(m=>{const active=(defaults.aiModel||DEFAULT_AI_MODEL)===m.id;
+                  return (<button key={m.id} onClick={()=>onUpdateDefaults({aiModel:m.id})} style={{textAlign:"left",padding:"12px 14px",fontSize:13,fontFamily:font,color:active?C.bright:C.text,background:active?C.accentSoft:"rgba(200,205,211,0.04)",border:`1px solid ${active?C.accent:C.border}`,borderRadius:8,cursor:"pointer"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:3}}>
+                      <span style={{width:10,height:10,borderRadius:"50%",background:active?C.accent:"transparent",border:`1px solid ${active?C.accent:C.border}`}}/>
+                      <span style={{fontWeight:600}}>{m.label}</span>
+                    </div>
+                    <div style={{fontSize:11,color:C.dim,marginLeft:18}}>{m.desc}</div>
+                  </button>);
+                })}</div>
+                <div style={{fontSize:10,color:C.dim,marginTop:6,fontFamily:mono}}>Applies to all AI generations: trend analysis, posts, threads, articles.</div>
+              </div>
             </div>
           </div>
         </div>)}
@@ -1936,9 +1952,14 @@ const useContextFiles=(user)=>{
 
 // ─── Data: useUserSettings hook (Supabase) ────────────────────────────────────
 // Single row per user (auto-created by trigger on signup). Uses upsert defensively.
-const DEFAULT_SETTINGS={tone:"founder",postLength:"normal",threadLength:"normal",articleLength:"normal"};
-const rowToSettings=(r)=>({tone:r.tone||"founder",postLength:r.post_length||"normal",threadLength:r.thread_length||"normal",articleLength:r.article_length||"normal"});
-const settingsToRow=(s,userId)=>({user_id:userId,tone:s.tone,post_length:s.postLength,thread_length:s.threadLength,article_length:s.articleLength});
+const AI_MODELS=[
+  {id:"llama-3.3-70b-versatile",label:"Llama 3.3 70B",desc:"Higher quality. Slower. Tight rate limit on free tier."},
+  {id:"llama-3.1-8b-instant",label:"Llama 3.1 8B Instant",desc:"Faster, much higher rate limit. Best for high-volume drafting."},
+];
+const DEFAULT_AI_MODEL="llama-3.3-70b-versatile";
+const DEFAULT_SETTINGS={tone:"founder",postLength:"normal",threadLength:"normal",articleLength:"normal",aiModel:DEFAULT_AI_MODEL};
+const rowToSettings=(r)=>({tone:r.tone||"founder",postLength:r.post_length||"normal",threadLength:r.thread_length||"normal",articleLength:r.article_length||"normal",aiModel:r.ai_model||DEFAULT_AI_MODEL});
+const settingsToRow=(s,userId)=>({user_id:userId,tone:s.tone,post_length:s.postLength,thread_length:s.threadLength,article_length:s.articleLength,ai_model:s.aiModel||DEFAULT_AI_MODEL});
 
 const useUserSettings=(user)=>{
   const[settings,setSettings]=useState(DEFAULT_SETTINGS);
@@ -2418,8 +2439,10 @@ function AuthenticatedApp({user,signOut}){
   const ctxFiles=useContextFiles(user);
   // One-time cleanup: drop old localStorage data (we no longer persist context_files there)
   useEffect(()=>{try{if(typeof localStorage!=="undefined")localStorage.removeItem("honoroll_context_files");}catch(e){}},[]);
-  // Defaults (tone, post/thread/article length) now stored in Supabase user_settings
+  // Defaults (tone, post/thread/article length, AI model) now stored in Supabase user_settings
   const userSettings=useUserSettings(user);
+  // Keep the module-level AI model in sync with the user's chosen setting
+  useEffect(()=>{setActiveAIModel(userSettings.settings.aiModel);},[userSettings.settings.aiModel]);
   // One-time cleanup of old localStorage entry
   useEffect(()=>{try{if(typeof localStorage!=="undefined")localStorage.removeItem("honoroll_defaults");}catch(e){}},[]);
   // Calendar entries now stored in Supabase (per user)

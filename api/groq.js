@@ -2,7 +2,7 @@ export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
-  const { system, user, max_tokens = 4096, temperature = 0.7 } = req.body;
+  const { system, user, max_tokens = 4096, temperature = 0.7, model } = req.body;
   if (!system || !user) {
     return res.status(400).json({ error: "Missing system or user message" });
   }
@@ -10,8 +10,12 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: "GROQ_API_KEY not configured on server" });
   }
 
+  // Whitelist allowed models to prevent the proxy being used as an open Groq gateway
+  const ALLOWED_MODELS = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"];
+  const chosenModel = ALLOWED_MODELS.includes(model) ? model : "llama-3.3-70b-versatile";
+
   const body = JSON.stringify({
-    model: "llama-3.3-70b-versatile",
+    model: chosenModel,
     messages: [
       { role: "system", content: system },
       { role: "user", content: user },
