@@ -128,9 +128,9 @@ function getCompareLabel(rangeId,compareMode) {
 }
 
 // ─── Umami API Layer ─────────────────────────────────────────────────────────
-function umamiBase(region){return`https://api.umami.is/v1${region?`/${region}`:""}`;}
 async function umamiFetch(path,apiKey,region){
-  const res=await fetch(`${umamiBase(region)}${path}`,{headers:{"Accept":"application/json","x-umami-api-key":apiKey}});
+  const url=`/api/umami?path=${encodeURIComponent(path)}${region?`&region=${encodeURIComponent(region)}`:""}`;
+  const res=await fetch(url,{headers:{"Accept":"application/json"}});
   if(!res.ok) throw new Error(`Umami ${path}: ${res.status}`);return res.json();
 }
 function qs(params){return Object.entries(params).filter(([,v])=>v!=null).map(([k,v])=>`${k}=${encodeURIComponent(v)}`).join("&");}
@@ -192,7 +192,7 @@ function useAnalyticsData(cfg,site,rangeId,compareMode) {
               CLS:{value:a["cumulative-layout-shift"]?.displayValue||"—",rating:a["cumulative-layout-shift"]?.score>=0.9?"good":a["cumulative-layout-shift"]?.score>=0.5?"needs-improvement":"poor"},
               TTFB:{value:a["server-response-time"]?.displayValue||"—",rating:a["server-response-time"]?.score>=0.9?"good":a["server-response-time"]?.score>=0.5?"needs-improvement":"poor"}}};}}catch(e){}
       let seoAudit=null;
-      if(seoKey){try{const sR=await fetch(`https://seoscoreapi.com/audit?url=https://${site.domain}`,{headers:{"X-API-Key":seoKey}});if(sR.ok)seoAudit=await sR.json();}catch(e){}}
+      try{const sR=await fetch(`/api/seo?domain=${encodeURIComponent(site.domain)}`);if(sR.ok)seoAudit=await sR.json();}catch(e){}
       setData({statsToday,statsYesterday,active:active.visitors||0,timeSeries:timeData,unit,
         pages:fmtM(pages),referrers:fmtM(referrers),countries:fmtM(countries).map(c=>({...c,code:c.name.length===2?c.name:""})),
         browsers:fmtM(browsers),devices:fmtM(devices),os:fmtM(os),events:fmtM(events),
@@ -281,18 +281,10 @@ Rules:
 - Return raw JSON only.`;
 
 async function callLLM(systemPrompt,userMessage,maxTokens=4096){
-  // Try Anthropic API first (works in artifact preview on claude.ai)
-  try {
-    const aRes=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:maxTokens,system:systemPrompt,
-        messages:[{role:"user",content:userMessage}]})});
-    if(aRes.ok){const d=await aRes.json();return (d.content||[]).map(b=>b.type==="text"?b.text:"").join("").replace(/```json|```/g,"").trim();}
-  } catch(e){}
-  // Fallback to Groq (works in standalone HTML)
-  const res=await fetch("https://api.groq.com/openai/v1/chat/completions",{method:"POST",headers:{"Content-Type":"application/json","Authorization":`Bearer ${KEYS.groqKey}`},
-    body:JSON.stringify({model:"llama-3.3-70b-versatile",messages:[{role:"system",content:systemPrompt},{role:"user",content:userMessage}],max_tokens:maxTokens,temperature:0.7})});
+  const res=await fetch("/api/groq",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({system:systemPrompt,user:userMessage,max_tokens:maxTokens,temperature:0.7})});
   if(!res.ok){const e=await res.text().catch(()=>"");throw new Error(`API error ${res.status}: ${e.slice(0,200)}`);}
-  const d=await res.json();return (d.choices?.[0]?.message?.content||"").replace(/```json|```/g,"").trim();
+  const d=await res.json();return (d.text||"").replace(/```json|```/g,"").trim();
 }
 
 async function analyzeWithAI(payload,userContext){const sysPrompt=SYS_PROMPT+(userContext||"");const txt=await callLLM(sysPrompt,`Analytics data:\n\n${payload}`);
