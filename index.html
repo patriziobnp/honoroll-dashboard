@@ -369,6 +369,10 @@ Be specific. Reference real numbers from the data when possible. Do not be gener
             <div><div style={{fontSize:13,fontWeight:600,color:C.bright,marginBottom:3}}>{a.title}</div><div style={{fontSize:12,color:C.text,lineHeight:1.55}}>{a.description}</div></div>
           </div>))}
         </div>)}
+        {/* Close button at bottom for easy collapse after reading */}
+        <div style={{display:"flex",justifyContent:"flex-end",marginTop:14,paddingTop:12,borderTop:`1px solid ${C.border}`}}>
+          <button onClick={()=>setExpanded(false)} style={{fontSize:11,fontFamily:mono,color:C.dim,background:"none",border:`1px solid ${C.border}`,borderRadius:6,padding:"5px 12px",cursor:"pointer",transition:"all 0.15s"}}>Close ↑</button>
+        </div>
       </div>)}
     </div>)}
   </div>);
@@ -421,7 +425,7 @@ const Dashboard=({cfg,site,useMock,onSettings,rangeId,onRangeChange,compareMode,
   };
   useEffect(()=>{setLastUpdated(Date.now());},[rangeId,compareMode]);
 
-  if(loading)return (<div style={{maxWidth:1280,margin:"0 auto",padding:"80px 28px",textAlign:"center"}}><div style={{display:"flex",justifyContent:"center",gap:6,marginBottom:18}}>{[0,1,2].map(i=>(<div key={i} style={{width:10,height:10,borderRadius:"50%",background:C.accent,animation:`pulse 1.2s ease-in-out ${i*0.2}s infinite`}}/>))}</div><div style={{fontSize:15,color:C.text,fontWeight:500}}>Loading analytics...</div></div>);
+  if(loading&&!data)return (<div style={{maxWidth:1280,margin:"0 auto",padding:"80px 28px",textAlign:"center"}}><div style={{display:"flex",justifyContent:"center",gap:6,marginBottom:18}}>{[0,1,2].map(i=>(<div key={i} style={{width:10,height:10,borderRadius:"50%",background:C.accent,animation:`pulse 1.2s ease-in-out ${i*0.2}s infinite`}}/>))}</div><div style={{fontSize:15,color:C.text,fontWeight:500}}>Loading analytics...</div></div>);
   if(error)return (<div style={{maxWidth:600,margin:"80px auto",padding:"24px",background:C.redSoft,border:"1px solid rgba(248,113,113,0.15)",borderRadius:12}}><div style={{fontSize:16,color:C.red,fontWeight:600,marginBottom:8}}>Failed to load</div><div style={{fontSize:13,color:C.text,marginBottom:16}}>{error}</div><button onClick={refresh} style={{padding:"8px 20px",background:C.accent,border:"none",borderRadius:8,color:C.bg,fontSize:13,fontWeight:600,cursor:"pointer"}}>Retry</button></div>);
   if(!data)return null;
   const t=data.statsToday,y=data.statsYesterday;
@@ -446,7 +450,7 @@ const Dashboard=({cfg,site,useMock,onSettings,rangeId,onRangeChange,compareMode,
     {/* Site Health */}
     {(data.pageSpeed||data.seoAudit)&&<><Heading desc="PageSpeed Insights + SEO Score API. Current state, not date-range dependent.">Site Health</Heading><SiteHealth pagespeed={data.pageSpeed} seoscore={data.seoAudit}/></>}
     {/* Sticky range bar — controls everything below */}
-    <StickyRangeBar rangeId={rangeId} onRangeChange={onRangeChange} compareMode={compareMode} onCompareChange={onCompareChange} onRefresh={handleRefresh} lastUpdated={lastUpdated} refreshing={refreshing}/>
+    <StickyRangeBar rangeId={rangeId} onRangeChange={onRangeChange} compareMode={compareMode} onCompareChange={onCompareChange} onRefresh={handleRefresh} lastUpdated={lastUpdated} refreshing={refreshing||loading}/>
     {/* KPIs */}
     <Heading desc={showDeltas?`${rangeLabel} vs ${compareLabel}.`:`${rangeLabel}.`}>At a Glance</Heading>
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(200px, 1fr))",gap:16,marginBottom:32}}>
