@@ -1891,7 +1891,7 @@ const ContentPage=({analyticsData,contentState,setContentState,contextFiles,defa
     {actions&&<div style={{display:"flex",gap:S.sm,alignItems:"center",flexWrap:"wrap"}}>{actions}</div>}
   </div>);
 
-  return (<div style={{maxWidth:1280,margin:"0 auto",padding:`${S.xl}px ${S.lg+4}px`,position:"relative"}}>
+  return (<div style={{maxWidth:1280,margin:"0 auto",padding:`${S.xl}px ${S.xxl-4}px`,position:"relative"}}>
     <PageBackdrop color="rgba(140,217,90,0.06)"/>
     {/* Top header */}
     <div style={{position:"relative",zIndex:1,marginBottom:S.xxxl,paddingBottom:S.xl,borderBottom:`1px solid ${C.border}`}}>
@@ -2104,7 +2104,7 @@ const UtmPage=({utmLinks})=>{
 
   const uniqueSources=[...new Set(utmHistory.map(h=>h.source))];
 
-  return (<div style={{maxWidth:1280,margin:"0 auto",padding:`${S.xl}px ${S.lg+4}px`,position:"relative"}}>
+  return (<div style={{maxWidth:1280,margin:"0 auto",padding:`${S.xl}px ${S.xxl-4}px`,position:"relative"}}>
     <PageBackdrop color="rgba(217,90,140,0.06)"/>
     {/* Top header */}
     <div style={{position:"relative",zIndex:1,marginBottom:S.xxxl,paddingBottom:S.xl,borderBottom:`1px solid ${C.border}`}}>
@@ -2207,7 +2207,7 @@ const Header=({active,onChange,onSettings,settingsActive,user,onSignOut})=>{
   const[menuOpen,setMenuOpen]=useState(false);
   const initial=(user?.email||"?").charAt(0).toUpperCase();
   return (<div style={{background:"rgba(10,13,17,0.72)",backdropFilter:"blur(14px) saturate(140%)",WebkitBackdropFilter:"blur(14px) saturate(140%)",borderBottom:`1px solid ${C.border}`,position:"sticky",top:0,zIndex:40}}>
-    <div style={{maxWidth:1280,margin:"0 auto",padding:`${S.md+2}px ${S.lg+4}px`,display:"flex",alignItems:"center",gap:S.xxl,flexWrap:"wrap"}}>
+    <div style={{maxWidth:1280,margin:"0 auto",padding:`${S.md+2}px ${S.xxl-4}px`,display:"flex",alignItems:"center",gap:S.xxl,flexWrap:"wrap"}}>
       {/* Logo */}
       <div style={{display:"flex",alignItems:"center",gap:S.md-2,flexShrink:0}}>
         <HonorollMark size={32} radius={10}/>
@@ -2253,7 +2253,7 @@ const SettingsPage=({ctxFiles,brandAssets,defaults,onUpdateDefaults,saveState})=
   const[showContext,setShowContext]=useState(true);
   const[showAssets,setShowAssets]=useState(true);
 
-  return (<div style={{maxWidth:1280,margin:"0 auto",padding:`${S.xl}px ${S.lg+4}px`,position:"relative"}}>
+  return (<div style={{maxWidth:1280,margin:"0 auto",padding:`${S.xl}px ${S.xxl-4}px`,position:"relative"}}>
     <PageBackdrop color="rgba(176,90,217,0.05)"/>
     <div style={{position:"relative",zIndex:1,marginBottom:S.xxxl,paddingBottom:S.xl,borderBottom:`1px solid ${C.border}`,display:"flex",justifyContent:"space-between",alignItems:"flex-end",flexWrap:"wrap",gap:S.lg}}>
       <div>
