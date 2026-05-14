@@ -777,7 +777,13 @@ const TONES=[
   {id:"provocative",label:"Provocative",desc:"Bold claims, challenging norms"},
 ];
 
-const ToneSelector=({value,onChange})=>(<div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:20}}>{TONES.map(t=>(<button key={t.id} onClick={()=>onChange(t.id)} style={{padding:"8px 16px",fontSize:12,fontFamily:font,fontWeight:value===t.id?600:400,color:value===t.id?C.bg:C.muted,background:value===t.id?C.accent:"rgba(200,205,211,0.04)",border:value===t.id?"none":`1px solid ${C.border}`,borderRadius:8,cursor:"pointer",transition:"all 0.15s"}} title={t.desc}>{t.label}</button>))}</div>);
+// Linear-style segmented control — one container with the active option
+// promoted via elevated surface + accent border. No gap rendering.
+const ToneSelector=({value,onChange})=>(<div style={{display:"inline-flex",flexWrap:"wrap",gap:S.xs,padding:S.xs,background:C.surface,border:`1px solid ${C.border}`,borderRadius:10}}>
+  {TONES.map(t=>{const isActive=value===t.id;
+    return (<button key={t.id} onClick={()=>onChange(t.id)} title={t.desc} style={{padding:`${S.sm-1}px ${S.lg-2}px`,fontSize:T.caption,fontFamily:font,fontWeight:isActive?600:500,color:isActive?C.bright:C.muted,background:isActive?C.surfaceElevated:"transparent",border:isActive?`1px solid ${C.accentBdr}`:"1px solid transparent",borderRadius:8,cursor:"pointer",transition:"all 0.18s",letterSpacing:"0.01em"}}>{t.label}</button>);
+  })}
+</div>);
 
 const TONE_INSTRUCTIONS={
   founder:`FOUNDER VOICE.
@@ -919,8 +925,10 @@ const EditableText=({value,onChange,maxChars,style:customStyle})=>{
 const LengthPicker=({value,onChange})=>{
   const opts=[{id:"short",label:"S"},{id:"normal",label:"M"},{id:"long",label:"L"}];
   const labels={short:"Short",normal:"Normal",long:"Long"};
-  return (<div style={{display:"flex",gap:2,background:"rgba(200,205,211,0.04)",padding:3,borderRadius:8,border:`1px solid ${C.border}`}} title={`Length: ${labels[value]}`}>
-    {opts.map(o=> <button key={o.id} onClick={()=>onChange(o.id)} style={{padding:"5px 12px",fontSize:11,fontFamily:mono,fontWeight:value===o.id?700:500,color:value===o.id?C.bg:C.muted,background:value===o.id?C.accent:"transparent",border:"none",borderRadius:5,cursor:"pointer",transition:"all 0.15s"}} title={labels[o.id]}>{o.label}</button>)}
+  return (<div style={{display:"inline-flex",gap:S.xs/2,background:C.surface,padding:S.xs,borderRadius:8,border:`1px solid ${C.border}`}} title={`Length: ${labels[value]}`}>
+    {opts.map(o=>{const isActive=value===o.id;
+      return (<button key={o.id} onClick={()=>onChange(o.id)} title={labels[o.id]} style={{padding:`${S.xs+1}px ${S.md}px`,fontSize:T.caption-1,fontFamily:mono,fontWeight:700,color:isActive?C.bright:C.muted,background:isActive?C.surfaceElevated:"transparent",border:isActive?`1px solid ${C.accentBdr}`:"1px solid transparent",borderRadius:6,cursor:"pointer",transition:"all 0.18s",minWidth:24}}>{o.label}</button>);
+    })}
   </div>);
 };
 
@@ -960,17 +968,17 @@ const CopyBtn=({text,label,onCopied})=>{const[copied,setCopied]=useState(false);
     else{fallback();}
   }catch(e){fallback();}
   function fallback(){const ta=document.createElement("textarea");ta.value=text;ta.style.cssText="position:fixed;left:-9999px;top:-9999px";document.body.appendChild(ta);ta.select();try{document.execCommand("copy");setCopied(true);if(onCopied)onCopied();setTimeout(()=>setCopied(false),2000);}catch(e){}document.body.removeChild(ta);}
-};return <button onClick={copy} style={{fontSize:11,fontFamily:mono,color:copied?C.green:C.muted,background:"none",border:`1px solid ${copied?C.greenBdr:C.border}`,borderRadius:6,padding:"4px 10px",cursor:"pointer",transition:"all 0.2s"}}>{copied?"Copied":label||"Copy"}</button>;};
-const DraftBadge=()=> <span style={{fontSize:9,fontWeight:700,fontFamily:mono,color:C.accent,textTransform:"uppercase",letterSpacing:"0.1em",padding:"2px 8px",background:C.accentSoft,borderRadius:4}}>Draft</span>;
-const ScheduledBadge=()=> <span style={{fontSize:9,fontWeight:700,fontFamily:mono,color:C.green,textTransform:"uppercase",letterSpacing:"0.1em",padding:"2px 8px",background:C.greenSoft,borderRadius:4}}>Scheduled</span>;
-const CharCount=({n})=> <span style={{fontSize:10,fontFamily:mono,color:n>280?C.red:C.dim}}>{n}/280</span>;
+};return <button onClick={copy} style={{fontSize:T.caption-1,fontFamily:mono,fontWeight:500,color:copied?C.green:C.muted,background:copied?C.greenSoft:C.surfaceElevated,border:`1px solid ${copied?C.greenBdr:C.border}`,borderRadius:6,padding:`${S.xs+1}px ${S.md-2}px`,cursor:"pointer",transition:"all 0.2s",display:"inline-flex",alignItems:"center",gap:S.xs}}>{copied?"✓ Copied":(label||"Copy")}</button>;};
+const DraftBadge=()=> <span style={{display:"inline-flex",alignItems:"center",gap:S.xs,fontSize:T.eyebrow,fontWeight:700,fontFamily:mono,color:C.accent,textTransform:"uppercase",letterSpacing:"0.10em",padding:`${S.xs-1}px ${S.sm+1}px`,background:C.accentSoft,border:`1px solid ${C.accentBdr}`,borderRadius:5}}><span style={{width:5,height:5,borderRadius:"50%",background:C.accent}}/>Draft</span>;
+const ScheduledBadge=()=> <span style={{display:"inline-flex",alignItems:"center",gap:S.xs,fontSize:T.eyebrow,fontWeight:700,fontFamily:mono,color:C.green,textTransform:"uppercase",letterSpacing:"0.10em",padding:`${S.xs-1}px ${S.sm+1}px`,background:C.greenSoft,border:`1px solid ${C.greenBdr}`,borderRadius:5}}><span style={{width:5,height:5,borderRadius:"50%",background:C.green}}/>Scheduled</span>;
+const CharCount=({n})=> {const over=n>280;const near=n>240;return <span className="tabnum" style={{fontSize:T.eyebrow+1,fontFamily:mono,fontWeight:over?700:500,color:over?C.red:near?C.accent:C.dim,padding:`${S.xs-1}px ${S.sm}px`,background:over?C.redSoft:"transparent",borderRadius:4}}>{n}/280</span>;};
 
-const STATUS_COLORS={draft:C.dim,scheduled:C.accent,published:C.green};
+const STATUS_COLORS={draft:C.dim,scheduled:C.green,published:C.blue};
 const STATUS_LABELS={draft:"Draft",scheduled:"Scheduled",published:"Published"};
 const TYPE_COLORS={post:C.accent,thread:C.blue,article:C.purple};
 const TYPE_LABELS={post:"Post",thread:"Thread",article:"Article"};
 
-const StatusBadge=({status})=> <span style={{fontSize:9,fontWeight:700,fontFamily:mono,color:STATUS_COLORS[status||"draft"],textTransform:"uppercase",letterSpacing:"0.1em",padding:"2px 8px",background:`${STATUS_COLORS[status||"draft"]}15`,borderRadius:4}}>{STATUS_LABELS[status||"draft"]}</span>;
+const StatusBadge=({status})=>{const c=STATUS_COLORS[status||"draft"];return <span style={{display:"inline-flex",alignItems:"center",gap:S.xs,fontSize:T.eyebrow,fontWeight:700,fontFamily:mono,color:c,textTransform:"uppercase",letterSpacing:"0.10em",padding:`${S.xs-1}px ${S.sm+1}px`,background:`${c}1A`,border:`1px solid ${c}55`,borderRadius:5}}><span style={{width:5,height:5,borderRadius:"50%",background:c}}/>{STATUS_LABELS[status||"draft"]}</span>;};
 
 // ─── Schedule Picker ─────────────────────────────────────────────────────────
 // Local-timezone YYYY-MM-DD formatter (avoid UTC drift from toISOString)
@@ -1540,7 +1548,7 @@ const ContentCalendar=({history,onUpdateEntry,onDeleteEntry,onUploadImage})=>{
             <div style={{width:36,height:36,borderRadius:"50%",background:`linear-gradient(135deg,${C.accent},#E8C06A)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:700,color:C.bg}}>H</div>
             <div><div style={{fontSize:13,fontWeight:600,color:C.bright}}>Honoroll</div><div style={{fontSize:11,color:C.dim,fontFamily:mono}}>@honoroll</div></div>
             <div style={{marginLeft:"auto",display:"flex",gap:6,alignItems:"center"}}>
-              <button onClick={(e)=>{e.stopPropagation();cycleStatus(entry);}} style={{fontSize:9,fontWeight:600,fontFamily:mono,color:STATUS_COLORS[entry.status||"draft"],padding:"3px 8px",background:`${STATUS_COLORS[entry.status||"draft"]}15`,border:`1px solid ${STATUS_COLORS[entry.status||"draft"]}30`,borderRadius:4,cursor:"pointer",textTransform:"uppercase"}}>{STATUS_LABELS[entry.status||"draft"]} ↻</button>
+              <button onClick={(e)=>{e.stopPropagation();cycleStatus(entry);}} style={{display:"inline-flex",alignItems:"center",gap:S.xs,fontSize:T.eyebrow,fontWeight:700,fontFamily:mono,color:STATUS_COLORS[entry.status||"draft"],padding:`${S.xs-1}px ${S.sm+1}px`,background:`${STATUS_COLORS[entry.status||"draft"]}1A`,border:`1px solid ${STATUS_COLORS[entry.status||"draft"]}55`,borderRadius:5,cursor:"pointer",textTransform:"uppercase",letterSpacing:"0.10em"}}><span style={{width:5,height:5,borderRadius:"50%",background:STATUS_COLORS[entry.status||"draft"]}}/>{STATUS_LABELS[entry.status||"draft"]} ↻</button>
               <span style={{fontSize:10,fontFamily:mono,color:C.dim}}>{TYPE_LABELS[entry.type]}</span>
             </div>
           </div>
@@ -1769,7 +1777,12 @@ const ContentPage=({analyticsData,contentState,setContentState,contextFiles,defa
   const formatThread=(arr)=>arr.map((t,i)=>`${i+1}/${arr.length}\n${t.tweet}`).join("\n\n---\n\n");
   const formatThreadTypefully=(arr)=>arr.map(t=>t.tweet).join("\n\n🧵\n\n");
 
-  const GenBtn=({onClick,loading,exists,color,children})=> (<button onClick={onClick} disabled={loading} style={{padding:"10px 24px",fontSize:14,fontWeight:600,fontFamily:font,cursor:"pointer",transition:"all 0.2s",borderRadius:10,border:"none",background:loading?"rgba(200,205,211,0.06)":exists?"rgba(200,205,211,0.06)":`linear-gradient(135deg,${color},${color}99)`,color:loading?C.muted:exists?C.muted:C.bg,opacity:loading?0.5:1}}>{loading?"Generating...":exists?"Regenerate":children}</button>);
+  const GenBtn=({onClick,loading,exists,color,children})=>{
+    const primary=!loading&&!exists;
+    return (<button onClick={onClick} disabled={loading} style={{padding:`${S.md-2}px ${S.xl}px`,fontSize:T.body,fontWeight:600,fontFamily:font,cursor:loading?"not-allowed":"pointer",transition:"all 0.2s",borderRadius:10,border:exists?`1px solid ${C.border}`:"none",background:primary?`linear-gradient(135deg,${color},${color}D9)`:exists?C.surfaceElevated:C.surface,color:primary?C.bg:loading?C.muted:C.bright,opacity:loading?0.6:1,boxShadow:primary?`0 6px 16px ${color}33`:"none",display:"inline-flex",alignItems:"center",gap:S.sm}}>
+      {loading?<>{[0,1,2].map(i=>(<span key={i} style={{width:5,height:5,borderRadius:"50%",background:C.muted,animation:`pulse 1.2s ease-in-out ${i*0.2}s infinite`}}/>))}<span style={{marginLeft:S.xs}}>Generating</span></>:exists?<>↻ Regenerate</>:children}
+    </button>);
+  };
 
   // Section header + actions row used at the top of each generator SectionCard
   const SectionHeader=({eyebrow,accent,title,desc,actions})=>(<div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end",gap:S.lg,flexWrap:"wrap",marginBottom:S.lg}}>
