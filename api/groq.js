@@ -1,4 +1,4 @@
-import { requireAuth } from "./_auth.js";
+import { requireAuth, checkRateLimit } from "./_auth.js";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -8,6 +8,15 @@ export default async function handler(req, res) {
   const user = await requireAuth(req);
   if (!user) {
     return res.status(401).json({ error: "Unauthorized" });
+  }
+  // Per-user rate limit (30 calls/min) prevents a single signed-in user from
+  // draining the Groq quota by looping the generators.
+  const limited = checkRateLimit(user.id, { max: 30, windowMs: 60_000 });
+  if (limited) {
+    res.setHeader("Retry-After", String(limited.retryAfter));
+    return res.status(429).json({
+      error: `Too many requests. Please wait ${limited.retryAfter}s before generating again.`,
+    });
   }
   const { system, user: userMsg, max_tokens = 4096, temperature = 0.7, model } = req.body;
   if (!system || !userMsg) {

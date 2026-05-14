@@ -16,14 +16,14 @@
     button:hover{opacity:0.85}
     #loading-msg{display:flex;align-items:center;justify-content:center;height:100vh;color:#6B7280;font-size:14px;font-family:'DM Sans',sans-serif}
   </style>
-  <script src="https://unpkg.com/react@18.2.0/umd/react.development.js"></script>
-  <script src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.development.js"></script>
-  <script src="https://unpkg.com/react-is@18.2.0/umd/react-is.production.min.js"></script>
-  <script src="https://unpkg.com/prop-types@15.8.1/prop-types.min.js"></script>
-  <script src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js"></script>
-  <script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-  <script src="https://unpkg.com/dompurify@3.1.6/dist/purify.min.js"></script>
-  <script src="https://unpkg.com/@babel/standalone@7.24.0/babel.min.js"></script>
+  <script src="https://unpkg.com/react@18.2.0/umd/react.production.min.js" integrity="sha384-tMH8h3BGESGckSAVGZ82T9n90ztNXxvdwvdM6UoR56cYcf+0iGXBliJ29D+wZ/x8" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js" integrity="sha384-bm7MnzvK++ykSwVJ2tynSE5TRdN+xL418osEVF2DE/L/gfWHj91J2Sphe582B1Bh" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-is@18.2.0/umd/react-is.production.min.js" integrity="sha384-XYVQ7LtYqgha4ByzNRLR6NHo9p0yVDvmTNuQkiIweU0U8WqLWBkH1L771VlP6fYx" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/prop-types@15.8.1/prop-types.min.js" integrity="sha384-/AfDwVDXNopzPvhxMPQ11y1OCpR6mVkWx47qzSwIiquvxkcMkZddEzDNtIOtfCpk" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js" integrity="sha384-d1XH4LhwLW8j0l6VXMP8yJabdGY9ZqtZk7k7PaPk5NoUCcZ/hDkL5aaKioKQbcZg" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js" integrity="sha384-0w2KAL2YHP6wKOkUDzkCDGgVvfmHnj02DHeQ6XcHOgTfFsGyonKOpShMH1x6nk9o" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/dompurify@3.1.6/dist/purify.min.js" integrity="sha384-+VfUPEb0PdtChMwmBcBmykRMDd+v6D/oFmB3rZM/puCMDYcIvF968OimRh4KQY9a" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.24.0/babel.min.js" integrity="sha384-wVDXnilITixWtkFWH+Xu4zp0L3R7zd39Il4szMJlz9M3Vhsuerfbxy5ojdJdqOEX" crossorigin="anonymous"></script>
 </head>
 <body>
   <div id="root"><div id="loading-msg">Loading dashboard...</div></div>
@@ -57,6 +57,12 @@ const getSupabase=()=>{
   }
   return null;
 };
+
+// ─── Debug logging ──────────────────────────────────────────────────────────
+// Only emit operational logs in local dev. In production these are no-ops so
+// schema/query details don't leak via devtools.
+const IS_DEV=typeof window!=="undefined"&&/^(localhost|127\.0\.0\.1|\[::1\])$/.test(window.location.hostname);
+const debugLog=IS_DEV?console.error.bind(console):()=>{};
 
 // ─── Security helpers ────────────────────────────────────────────────────────
 // Fetch wrapper that attaches the current Supabase access token to every
@@ -227,7 +233,7 @@ function useAnalyticsData(cfg,site,rangeId,compareMode) {
         if(cachedRaw){const cached=JSON.parse(cachedRaw);if(cached&&cached.timestamp&&(Date.now()-cached.timestamp)<PSI_TTL_MS&&cached.data){pageSpeed=cached.data;}}
       }catch(e){}
       if(!pageSpeed){
-        try{const psiRes=await fetch(`https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=https://${site.domain}&category=performance&category=seo&category=accessibility`);
+        try{const psiRes=await authedFetch(`/api/pagespeed?domain=${encodeURIComponent(site.domain)}`);
           if(psiRes.ok){const psi=await psiRes.json();const cats=psi.lighthouseResult?.categories||{};const a=psi.lighthouseResult?.audits||{};
             pageSpeed={performance:Math.round((cats.performance?.score||0)*100),seo:Math.round((cats.seo?.score||0)*100),accessibility:Math.round((cats.accessibility?.score||0)*100),
               vitals:{LCP:{value:a["largest-contentful-paint"]?.displayValue||"—",rating:a["largest-contentful-paint"]?.score>=0.9?"good":a["largest-contentful-paint"]?.score>=0.5?"needs-improvement":"poor"},
@@ -1538,17 +1544,17 @@ const ContentPage=({analyticsData,contentState,setContentState,contextFiles,defa
   const setArticle=(a)=>setContentState(s=>({...s,article:a}));
   // Calendar operations now hit Supabase (async, fire-and-forget for snappy UI)
   const addCalendar=(type,preview,fullText)=>{
-    addEntry({type,preview,fullText,imagePath:null,date:ymd(new Date()),status:"draft"}).catch(e=>console.error("addCalendar failed",e));
+    addEntry({type,preview,fullText,imagePath:null,date:ymd(new Date()),status:"draft"}).catch(e=>debugLog("addCalendar failed",e));
   };
   const scheduleToDate=(type,preview,fullText,date)=>{
-    scheduleEntry({type,preview,fullText,date,imagePath:null}).catch(e=>console.error("scheduleToDate failed",e));
+    scheduleEntry({type,preview,fullText,date,imagePath:null}).catch(e=>debugLog("scheduleToDate failed",e));
   };
   const findScheduledDate=(type,fullText)=>{
     const entry=calendar.find(e=>e.status==="scheduled"&&e.type===type&&e.fullText===fullText);
     return entry?.date||null;
   };
-  const updateCalendarEntry=(updated)=>{updateEntry(updated).catch(e=>console.error("updateCalendarEntry failed",e));};
-  const deleteCalendarEntry=(id)=>{deleteEntry(id).catch(e=>console.error("deleteCalendarEntry failed",e));};
+  const updateCalendarEntry=(updated)=>{updateEntry(updated).catch(e=>debugLog("updateCalendarEntry failed",e));};
+  const deleteCalendarEntry=(id)=>{deleteEntry(id).catch(e=>debugLog("deleteCalendarEntry failed",e));};
   const updatePost=(idx,newText)=>{const updated=[...posts];updated[idx]={...updated[idx],text:newText,chars:newText.length};setPosts(updated);};
   const updateThreadTweet=(idx,newText)=>{const updated=[...thread];updated[idx]={...updated[idx],tweet:newText,chars:newText.length};setThread(updated);};
   const updateArticleBody=(newBody)=>setArticle({...article,body:newBody});
@@ -2174,7 +2180,7 @@ const batchSignedUrls=async(sb,bucket,items)=>{
     const map=new Map();
     validItems.forEach((it,i)=>{const result=data?.[i];if(result&&result.signedUrl)map.set(it.id,result.signedUrl);});
     return map;
-  }catch(e){console.error("batchSignedUrls failed",e);return new Map();}
+  }catch(e){debugLog("batchSignedUrls failed",e);return new Map();}
 };
 
 const rowToBrandAsset=(r,signedUrl)=>({
@@ -2316,7 +2322,7 @@ const useCalendarEntries=(user)=>{
   const deleteCalendarImage=async(path)=>{
     if(!path||path.startsWith("data:")||path.startsWith("http"))return;
     const sb=getSupabase();if(!sb)return;
-    try{await sb.storage.from(CALENDAR_IMAGES_BUCKET).remove([path]);}catch(e){console.error("storage cleanup failed",e);}
+    try{await sb.storage.from(CALENDAR_IMAGES_BUCKET).remove([path]);}catch(e){debugLog("storage cleanup failed",e);}
   };
 
   // Add a new entry (draft or scheduled). Returns the new entry (with real id).
