@@ -447,17 +447,84 @@ const StickyRangeBar=({rangeId,onRangeChange,compareMode,onCompareChange,onRefre
 };
 
 // ─── GeoChart ────────────────────────────────────────────────────────────────
-const GeoChart=({data})=>{const total=data.reduce((s,d)=>s+d.value,0);const[hov,setHov]=useState(null);if(!data.length)return null;return (<div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"22px 24px",marginBottom:24}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}><div style={{fontSize:13,fontWeight:600,color:C.muted}}>Traffic by Location</div><div style={{fontSize:12,fontFamily:mono,color:C.dim}}>{total.toLocaleString()} visitors</div></div><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(280px, 1fr))",gap:"2px 24px"}}>{data.map((d,i)=>{const pct=((d.value/total)*100).toFixed(1);return (<div key={i} onMouseEnter={()=>setHov(i)} onMouseLeave={()=>setHov(null)} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 6px",borderRadius:6,background:hov===i?"rgba(217,170,90,0.04)":"transparent",transition:"background 0.15s",cursor:"default"}}><span style={{fontSize:18,width:26,textAlign:"center",lineHeight:1}}>{toFlag(d.code)}</span><span style={{flex:1,fontSize:13,color:C.text,fontWeight:500}}>{d.name}</span><div style={{width:80,height:6,background:"rgba(200,205,211,0.06)",borderRadius:3,overflow:"hidden"}}><div style={{width:`${pct}%`,height:"100%",background:GEO[i]||C.dim,borderRadius:3}}/></div><span style={{fontFamily:mono,fontSize:12,color:C.muted,width:44,textAlign:"right"}}>{fmt(d.value)}</span><span style={{fontFamily:mono,fontSize:11,color:C.dim,width:42,textAlign:"right"}}>{pct}%</span></div>);})}</div></div>);};
+const GeoChart=({data})=>{
+  const total=data.reduce((s,d)=>s+d.value,0);
+  const max=data.length?Math.max(...data.map(d=>d.value)):1;
+  const[hov,setHov]=useState(null);
+  if(!data.length)return (<div style={{padding:`${S.xxl}px ${S.xl}px`,textAlign:"center",fontSize:T.body,color:C.muted,fontFamily:mono,background:C.surfaceInset,border:`1px dashed ${C.border}`,borderRadius:12}}>No visitor location data yet for this range.</div>);
+  return (<div style={{background:C.surfaceInset,border:`1px solid ${C.border}`,borderRadius:12,padding:`${S.xl}px ${S.xl}px`}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:S.xl}}>
+      <Eyebrow>Traffic by location</Eyebrow>
+      <span className="tabnum" style={{fontSize:T.caption,fontFamily:mono,color:C.dim}}>{total.toLocaleString()} visitors</span>
+    </div>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(300px, 1fr))",gap:`${S.xs/2}px ${S.xl}px`}}>{data.map((d,i)=>{
+      const pct=((d.value/total)*100).toFixed(1);
+      const intensity=(d.value/max);
+      const barColor=GEO[i]||C.dim;
+      return (<div key={i} onMouseEnter={()=>setHov(i)} onMouseLeave={()=>setHov(null)} style={{display:"flex",alignItems:"center",gap:S.md,padding:`${S.sm}px ${S.sm-2}px`,borderRadius:6,background:hov===i?C.accentSoft:"transparent",transition:"background 0.15s",cursor:"default",position:"relative",overflow:"hidden"}}>
+        <div style={{position:"absolute",left:0,top:0,bottom:0,width:`${intensity*100}%`,background:`linear-gradient(90deg,${barColor}22 0%,${barColor}05 100%)`,pointerEvents:"none"}}/>
+        <span style={{fontSize:18,width:26,textAlign:"center",lineHeight:1,zIndex:1}}>{toFlag(d.code)}</span>
+        <span style={{flex:1,fontSize:T.small,color:C.text,fontWeight:500,zIndex:1}}>{d.name}</span>
+        <span className="tabnum" style={{fontFamily:mono,fontSize:T.caption,color:C.bright,fontWeight:600,width:50,textAlign:"right",zIndex:1}}>{fmt(d.value)}</span>
+        <span className="tabnum" style={{fontFamily:mono,fontSize:T.caption-1,color:C.dim,width:46,textAlign:"right",zIndex:1}}>{pct}%</span>
+      </div>);
+    })}</div>
+  </div>);
+};
 
 // ─── Site Health ─────────────────────────────────────────────────────────────
 const RATING_COLOR={good:C.green,"needs-improvement":C.accent,poor:C.red};
-const ScoreRing=({score,label,size=72})=>{const r=(size-8)/2,circ=2*Math.PI*r,offset=circ-(score/100)*circ;const c=score>=90?C.green:score>=50?C.accent:C.red;return (<div style={{textAlign:"center"}}><svg width={size} height={size} style={{transform:"rotate(-90deg)"}}><circle cx={size/2} cy={size/2} r={r} fill="none" stroke="rgba(200,205,211,0.06)" strokeWidth={5}/><circle cx={size/2} cy={size/2} r={r} fill="none" stroke={c} strokeWidth={5} strokeDasharray={circ} strokeDashoffset={offset} strokeLinecap="round" style={{transition:"stroke-dashoffset 0.8s ease"}}/></svg><div style={{marginTop:-size+8,height:size-8,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:20,fontWeight:700,fontFamily:mono,color:C.bright}}>{score}</span></div><div style={{fontSize:10,color:C.muted,marginTop:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>{label}</div></div>);};
-const SiteHealth=({pagespeed,seoscore})=>{if(!pagespeed&&!seoscore)return null;return (<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(320px, 1fr))",gap:16,marginBottom:24}}>
-  {pagespeed&&(<div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"20px 22px"}}><div style={{fontSize:12,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:18}}>PageSpeed Insights</div><div style={{display:"flex",justifyContent:"space-around",marginBottom:20}}><ScoreRing score={pagespeed.performance} label="Performance"/><ScoreRing score={pagespeed.seo} label="SEO"/><ScoreRing score={pagespeed.accessibility} label="A11y"/></div><div style={{fontSize:11,fontWeight:600,color:C.dim,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:10}}>Core Web Vitals</div><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(80px, 1fr))",gap:8}}>{Object.entries(pagespeed.vitals).map(([k,v])=>(<div key={k} style={{background:"rgba(200,205,211,0.04)",borderRadius:6,padding:"8px 10px",textAlign:"center"}}><div style={{fontSize:10,color:C.dim,fontFamily:mono,marginBottom:4}}>{k}</div><div style={{fontSize:14,fontWeight:600,fontFamily:mono,color:RATING_COLOR[v.rating]||C.text}}>{v.value}</div></div>))}</div></div>)}
-  {seoscore&&(<div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"20px 22px"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}><div style={{fontSize:12,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em"}}>SEO Audit</div><div style={{display:"flex",alignItems:"center",gap:8}}><span style={{fontSize:28,fontWeight:700,fontFamily:mono,color:C.bright}}>{seoscore.score}</span>{seoscore.grade&&<span style={{fontSize:14,fontWeight:700,fontFamily:mono,padding:"2px 8px",borderRadius:4,background:seoscore.score>=80?C.greenSoft:C.accentSoft,color:seoscore.score>=80?C.green:C.accent}}>{seoscore.grade}</span>}</div></div>
-    <div style={{fontSize:12,color:C.text,lineHeight:1.6,marginBottom:16,padding:"12px 14px",background:"rgba(200,205,211,0.03)",borderRadius:8,borderLeft:`2px solid ${seoscore.score>=80?C.green:C.accent}`}}>{seoscore.score>=90?"Excellent. SEO best practices across the board.":seoscore.score>=80?"Good. Minor issues, solid foundation.":seoscore.score>=60?`Needs work. Scoring ${seoscore.score}/100 means search engines are missing key signals. Fix the issues below to improve.`:`Critical. Score of ${seoscore.score}/100 means significant problems hurting rankings.`}</div>
-    {seoscore.priorities?.length>0&&(<>{seoscore.priorities.slice(0,4).map((p,i)=>(<div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 0",borderBottom:i<3?"1px solid rgba(200,205,211,0.04)":"none"}}><span style={{fontSize:8,color:p.severity==="warning"?C.accent:C.blue}}>●</span><span style={{fontSize:12,color:C.text}}>{p.issue}</span></div>))}</>)}</div>)}
-</div>);};
+const ScoreRing=({score,label,size=84})=>{
+  const r=(size-10)/2;
+  const circ=2*Math.PI*r;
+  const offset=circ-(score/100)*circ;
+  const c=score>=90?C.green:score>=50?C.accent:C.red;
+  return (<div style={{textAlign:"center"}}>
+    <svg width={size} height={size} style={{transform:"rotate(-90deg)"}}>
+      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={C.gridLine} strokeWidth={6}/>
+      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={c} strokeWidth={6} strokeDasharray={circ} strokeDashoffset={offset} strokeLinecap="round" style={{transition:"stroke-dashoffset 0.8s ease",filter:`drop-shadow(0 0 8px ${c}55)`}}/>
+    </svg>
+    <div style={{marginTop:-size+10,height:size-10,display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <span className="tabnum" style={{fontSize:24,fontWeight:700,fontFamily:font,color:C.bright,letterSpacing:"-0.02em"}}>{score}</span>
+    </div>
+    <div style={{marginTop:S.sm}}><Eyebrow>{label}</Eyebrow></div>
+  </div>);
+};
+const SiteHealth=({pagespeed,seoscore})=>{
+  if(!pagespeed&&!seoscore)return null;
+  return (<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(340px, 1fr))",gap:S.lg}}>
+    {pagespeed&&(<div className="tile-hover" style={{background:C.surfaceElevated,border:`1px solid ${C.border}`,borderRadius:14,padding:`${S.xl}px ${S.xl}px`}}>
+      <div style={{marginBottom:S.xl}}><Eyebrow>PageSpeed Insights</Eyebrow></div>
+      <div style={{display:"flex",justifyContent:"space-around",marginBottom:S.xl,gap:S.md}}>
+        <ScoreRing score={pagespeed.performance} label="Performance"/>
+        <ScoreRing score={pagespeed.seo} label="SEO"/>
+        <ScoreRing score={pagespeed.accessibility} label="A11y"/>
+      </div>
+      <div style={{marginBottom:S.md}}><Eyebrow color={C.dim}>Core Web Vitals</Eyebrow></div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(80px, 1fr))",gap:S.sm}}>{Object.entries(pagespeed.vitals).map(([k,v])=>(<div key={k} style={{background:C.surfaceInset,border:`1px solid ${C.border}`,borderRadius:8,padding:`${S.sm+2}px ${S.md-2}px`,textAlign:"center"}}>
+        <div style={{fontSize:T.eyebrow,color:C.dim,fontFamily:mono,marginBottom:S.xs,textTransform:"uppercase",letterSpacing:"0.08em",fontWeight:600}}>{k}</div>
+        <div style={{fontSize:T.body+1,fontWeight:700,fontFamily:mono,color:RATING_COLOR[v.rating]||C.text}} className="tabnum">{v.value}</div>
+      </div>))}</div>
+    </div>)}
+    {seoscore&&(<div className="tile-hover" style={{background:C.surfaceElevated,border:`1px solid ${C.border}`,borderRadius:14,padding:`${S.xl}px ${S.xl}px`}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:S.md+2}}>
+        <Eyebrow>SEO Audit</Eyebrow>
+        <div style={{display:"flex",alignItems:"center",gap:S.sm}}>
+          <span className="tabnum" style={{fontSize:32,fontWeight:700,fontFamily:font,color:C.bright,letterSpacing:"-0.02em",lineHeight:1}}>{seoscore.score}</span>
+          {seoscore.grade&&<span style={{fontSize:T.body,fontWeight:700,fontFamily:mono,padding:`${S.xs}px ${S.sm+2}px`,borderRadius:6,background:seoscore.score>=80?C.greenSoft:C.accentSoft,color:seoscore.score>=80?C.green:C.accent,border:`1px solid ${seoscore.score>=80?C.greenBdr:C.accentBdr}`}}>{seoscore.grade}</span>}
+        </div>
+      </div>
+      <div style={{fontSize:T.caption,color:C.text,lineHeight:1.6,marginBottom:S.lg,padding:`${S.md}px ${S.md+2}px`,background:C.surfaceInset,borderRadius:8,borderLeft:`3px solid ${seoscore.score>=80?C.green:C.accent}`}}>{seoscore.score>=90?"Excellent. SEO best practices across the board.":seoscore.score>=80?"Good. Minor issues, solid foundation.":seoscore.score>=60?`Needs work. Scoring ${seoscore.score}/100 means search engines are missing key signals.`:`Critical. Score of ${seoscore.score}/100 means significant problems hurting rankings.`}</div>
+      {seoscore.priorities?.length>0&&(<div>
+        <div style={{marginBottom:S.sm}}><Eyebrow color={C.dim}>Priorities</Eyebrow></div>
+        {seoscore.priorities.slice(0,5).map((p,i)=>{const c=p.severity==="warning"?C.accent:C.blue;return (<div key={i} style={{display:"flex",alignItems:"flex-start",gap:S.sm+2,padding:`${S.sm-2}px 0`,borderBottom:i<Math.min(4,seoscore.priorities.length-1)?`1px solid ${C.gridLine}`:"none"}}>
+          <span style={{width:6,height:6,borderRadius:"50%",background:c,marginTop:7,flexShrink:0,boxShadow:`0 0 6px ${c}66`}}/>
+          <span style={{fontSize:T.caption,color:C.text,lineHeight:1.5}}>{p.issue}</span>
+        </div>);})}
+      </div>)}
+    </div>)}
+  </div>);
+};
 
 // ─── AI Insights Engine ──────────────────────────────────────────────────────
 function buildPayload(data){const t=data.statsToday,y=data.statsYesterday;return JSON.stringify({today:{...t,bounceRate:t.visits?((t.bounces/t.visits)*100).toFixed(1)+"%":"0%",avgDuration:durFmt(t.totaltime,t.visits)},yesterday:{...y,bounceRate:y.visits?((y.bounces/y.visits)*100).toFixed(1)+"%":"0%",avgDuration:durFmt(y.totaltime,y.visits)},timeSeries:data.timeSeries,topPages:data.pages,referrers:data.referrers,countries:data.countries,browsers:data.browsers,devices:data.devices,os:data.os,events:data.events,channels:data.channels,activeVisitors:data.active,pageSpeed:data.pageSpeed||null,seoAudit:data.seoAudit?{score:data.seoAudit.score,grade:data.seoAudit.grade,priorities:data.seoAudit.priorities?.slice(0,5)}:null},null,2);}
@@ -651,7 +718,41 @@ const Dashboard=({cfg,site,useMock,onSettings,rangeId,onRangeChange,compareMode,
   };
   useEffect(()=>{setLastUpdated(Date.now());},[rangeId,compareMode]);
 
-  if(loading&&!data)return (<div style={{maxWidth:1280,margin:"0 auto",padding:"80px 28px",textAlign:"center"}}><div style={{display:"flex",justifyContent:"center",gap:6,marginBottom:18}}>{[0,1,2].map(i=>(<div key={i} style={{width:10,height:10,borderRadius:"50%",background:C.accent,animation:`pulse 1.2s ease-in-out ${i*0.2}s infinite`}}/>))}</div><div style={{fontSize:15,color:C.text,fontWeight:500}}>Loading analytics...</div></div>);
+  if(loading&&!data){
+    const Shimmer=({h,w,r=8,mt=0,mb=0})=>(<div style={{height:h,width:w||"100%",borderRadius:r,marginTop:mt,marginBottom:mb,background:`linear-gradient(90deg,${C.surface} 0%,${C.surfaceElevated} 50%,${C.surface} 100%)`,backgroundSize:"200% 100%",animation:"shimmer 1.6s ease-in-out infinite"}}/>);
+    const SkelCard=({stripeColor,children})=>(<div style={{position:"relative",background:C.surface,border:`1px solid ${C.border}`,borderRadius:16,padding:S.xl+4,marginBottom:S.xxxl,overflow:"hidden"}}>
+      <div className="accent-stripe" style={{background:`linear-gradient(90deg,${stripeColor} 0%,${stripeColor} 30%,transparent 100%)`,opacity:0.6}}/>
+      {children}
+    </div>);
+    return (<div style={{maxWidth:1280,margin:"0 auto",padding:`${S.xl}px ${S.xxl-4}px`,position:"relative"}}>
+      <PageBackdrop color="rgba(217,170,90,0.05)"/>
+      <div style={{position:"relative",zIndex:1,marginBottom:S.xxxl,paddingBottom:S.xl,borderBottom:`1px solid ${C.border}`}}>
+        <Shimmer h={10} w={80} mb={S.sm}/>
+        <Shimmer h={36} w={260}/>
+        <Shimmer h={12} w={180} mt={S.md}/>
+      </div>
+      <SkelCard stripeColor={C.accent}>
+        <Shimmer h={10} w={120} mb={S.sm}/>
+        <Shimmer h={22} w={200} mb={S.lg}/>
+        <Shimmer h={140} r={12}/>
+      </SkelCard>
+      <SkelCard stripeColor={C.accent}>
+        <Shimmer h={10} w={100} mb={S.sm}/>
+        <Shimmer h={22} w={180} mb={S.lg}/>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(200px, 1fr))",gap:S.lg}}>
+          {[0,1,2,3].map(i=>(<div key={i} style={{background:C.surfaceElevated,border:`1px solid ${C.border}`,borderRadius:14,padding:S.xl}}>
+            <Shimmer h={10} w={60} mb={S.md}/>
+            <Shimmer h={32} w={120}/>
+            <Shimmer h={12} w={80} mt={S.md}/>
+          </div>))}
+        </div>
+      </SkelCard>
+      <div style={{textAlign:"center",fontSize:T.caption,color:C.dim,fontFamily:mono,marginTop:S.lg,display:"flex",justifyContent:"center",alignItems:"center",gap:S.sm}}>
+        {[0,1,2].map(i=>(<span key={i} style={{width:6,height:6,borderRadius:"50%",background:C.accent,animation:`pulse 1.2s ease-in-out ${i*0.2}s infinite`}}/>))}
+        <span style={{marginLeft:S.xs}}>Loading analytics</span>
+      </div>
+    </div>);
+  }
   if(error)return (<div style={{maxWidth:600,margin:"80px auto",padding:"24px",background:C.redSoft,border:"1px solid rgba(248,113,113,0.15)",borderRadius:12}}><div style={{fontSize:16,color:C.red,fontWeight:600,marginBottom:8}}>Failed to load</div><div style={{fontSize:13,color:C.text,marginBottom:16}}>{error}</div><button onClick={refresh} style={{padding:"8px 20px",background:C.accent,border:"none",borderRadius:8,color:C.bg,fontSize:13,fontWeight:600,cursor:"pointer"}}>Retry</button></div>);
   if(!data)return null;
   const t=data.statsToday,y=data.statsYesterday;
