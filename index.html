@@ -679,7 +679,7 @@ const SchedulePicker=({onPick,onClose,scheduledDate})=>{
   const today=new Date();const days=[];
   for(let i=0;i<14;i++){const d=new Date(today);d.setDate(d.getDate()+i);days.push(d);}
   const dayNames=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
-  return (<div style={{position:"absolute",top:"100%",right:0,zIndex:50,background:"#1A1F25",border:`1px solid ${C.border}`,borderRadius:10,padding:14,width:280,animation:"fadeIn 0.2s ease-out",boxShadow:"0 8px 32px rgba(0,0,0,0.4)"}}>
+  return (<div style={{position:"absolute",top:"100%",right:0,zIndex:1000,background:"#1A1F25",border:`1px solid ${C.border}`,borderRadius:10,padding:14,width:280,marginTop:6,animation:"fadeIn 0.2s ease-out",boxShadow:"0 8px 32px rgba(0,0,0,0.5)"}}>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
       <span style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em"}}>{scheduledDate?"Reschedule":"Schedule for"}</span>
       <button onClick={onClose} style={{background:"none",border:"none",color:C.dim,cursor:"pointer",fontSize:14}}>✕</button>
@@ -697,7 +697,7 @@ const SchedulePicker=({onPick,onClose,scheduledDate})=>{
 
 const ScheduleBtn=({onSchedule,scheduledDate})=>{
   const[show,setShow]=useState(false);
-  return (<div style={{position:"relative",display:"inline-block"}}>
+  return (<div style={{position:"relative",display:"inline-block",zIndex:show?1000:"auto"}}>
     <button onClick={()=>setShow(!show)} style={{fontSize:11,fontFamily:mono,color:scheduledDate?C.green:C.accent,background:scheduledDate?C.greenSoft:"none",border:`1px solid ${scheduledDate?C.greenBdr:C.accentSoft}`,borderRadius:6,padding:"4px 10px",cursor:"pointer"}}>📅 {scheduledDate?"Scheduled":"Schedule"}</button>
     {show&&<SchedulePicker onPick={(date)=>{onSchedule(date);setShow(false);}} onClose={()=>setShow(false)} scheduledDate={scheduledDate}/>}
   </div>);
