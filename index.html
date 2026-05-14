@@ -8,13 +8,31 @@
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
     *{box-sizing:border-box;margin:0;padding:0}html,body,#root{min-height:100vh}
-    body{background:#0B0E11;color:#C8CDD3;font-family:'DM Sans',sans-serif}
-    ::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:rgba(200,205,211,0.1);border-radius:3px}
+    body{background:#0A0D11;color:#D0D5DC;font-family:'DM Sans',sans-serif;font-feature-settings:"cv02","cv03","cv04","cv11"}
+    /* Tabular numerics so KPI numbers, char counts, dates align cleanly */
+    .tabnum{font-variant-numeric:tabular-nums}
+    ::-webkit-scrollbar{width:6px;height:6px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:rgba(200,205,211,0.14);border-radius:3px}::-webkit-scrollbar-thumb:hover{background:rgba(200,205,211,0.22)}
     @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.85)}}
     @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
     @keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
-    button:hover{opacity:0.85}
-    #loading-msg{display:flex;align-items:center;justify-content:center;height:100vh;color:#6B7280;font-size:14px;font-family:'DM Sans',sans-serif}
+    @keyframes shimmer{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
+    @keyframes activePulse{0%,100%{box-shadow:0 0 0 0 rgba(52,211,153,0.45)}50%{box-shadow:0 0 0 6px rgba(52,211,153,0)}}
+    @keyframes accentSlide{0%{transform:translateX(-100%)}50%{transform:translateX(0)}100%{transform:translateX(100%)}}
+    button:hover{opacity:0.92}
+    button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid #D9AA5A;outline-offset:2px;border-radius:6px}
+    /* Section card hover lift kept for grouped inner tiles only */
+    .tile-hover{transition:transform 0.18s ease,box-shadow 0.18s ease,border-color 0.18s ease}
+    .tile-hover:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,0.4)}
+    /* Section accent stripe — a thin gradient bar across the card's top edge */
+    .accent-stripe{position:absolute;top:0;left:0;right:0;height:3px;border-radius:16px 16px 0 0;pointer-events:none}
+    /* Reduced motion preferences */
+    @media (prefers-reduced-motion:reduce){
+      *,*::before,*::after{animation-duration:0.01ms!important;animation-iteration-count:1!important;transition-duration:0.01ms!important}
+      .tile-hover:hover{transform:none}
+    }
+    #loading-msg{display:flex;align-items:center;justify-content:center;height:100vh;color:#9CA3AF;font-size:14px;font-family:'DM Sans',sans-serif}
+    /* First-paint accent line at top of page */
+    .page-shimmer{position:fixed;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,#D9AA5A,transparent);animation:accentSlide 1.6s ease-out 1;z-index:100;pointer-events:none}
   </style>
   <script src="https://unpkg.com/react@18.2.0/umd/react.production.min.js" integrity="sha384-tMH8h3BGESGckSAVGZ82T9n90ztNXxvdwvdM6UoR56cYcf+0iGXBliJ29D+wZ/x8" crossorigin="anonymous"></script>
   <script src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js" integrity="sha384-bm7MnzvK++ykSwVJ2tynSE5TRdN+xL418osEVF2DE/L/gfWHj91J2Sphe582B1Bh" crossorigin="anonymous"></script>
@@ -31,18 +49,51 @@
 const { useState, useEffect, useCallback, useRef } = React;
 const { BarChart, Bar, AreaChart, ComposedChart, Area, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } = Recharts;
 
-// ─── Palette & Fonts ─────────────────────────────────────────────────────────
+// ─── Palette ─────────────────────────────────────────────────────────────────
+// Contrast targets: body text ≥ 7:1, secondary labels ≥ 5:1, captions ≥ 4.5:1.
+// Surface tones are layered: bg < surface < surfaceElevated.
 const C = {
-  bg:"#0B0E11",surface:"rgba(200,205,211,0.03)",border:"rgba(200,205,211,0.06)",
-  text:"#C8CDD3",bright:"#E8ECEF",muted:"#6B7280",dim:"#4B5563",
-  accent:"#D9AA5A",accentSoft:"rgba(217,170,90,0.08)",
-  blue:"#5AB8D9",green:"#34D399",greenSoft:"rgba(52,211,153,0.08)",greenBdr:"rgba(52,211,153,0.15)",
-  red:"#F87171",redSoft:"rgba(248,113,113,0.08)",pink:"#D95A8C",lime:"#8CD95A",purple:"#B05AD9",
+  bg:"#0A0D11",
+  surface:"rgba(200,205,211,0.05)",
+  surfaceElevated:"rgba(200,205,211,0.08)",
+  surfaceInset:"rgba(0,0,0,0.25)",
+  border:"rgba(200,205,211,0.12)",
+  borderStrong:"rgba(200,205,211,0.18)",
+  gridLine:"rgba(200,205,211,0.06)",
+  text:"#D0D5DC",        // body, ≈8:1
+  bright:"#F0F2F5",      // headings, ≈11:1
+  muted:"#9CA3AF",       // secondary labels, ≈7:1
+  dim:"#7C8694",         // captions, ≈5.2:1
+  faint:"#5B6473",       // disabled/decorative, ≈4:1
+  accent:"#D9AA5A",      // gold — brand, active states
+  accentBright:"#EFC078",
+  accentSoft:"rgba(217,170,90,0.10)",
+  accentBdr:"rgba(217,170,90,0.30)",
+  blue:"#5AB8D9",blueSoft:"rgba(90,184,217,0.10)",blueBdr:"rgba(90,184,217,0.28)",
+  green:"#34D399",greenSoft:"rgba(52,211,153,0.10)",greenBdr:"rgba(52,211,153,0.28)",
+  red:"#F87171",redSoft:"rgba(248,113,113,0.10)",redBdr:"rgba(248,113,113,0.26)",
+  pink:"#D95A8C",pinkSoft:"rgba(217,90,140,0.10)",pinkBdr:"rgba(217,90,140,0.28)",
+  lime:"#8CD95A",limeSoft:"rgba(140,217,90,0.10)",limeBdr:"rgba(140,217,90,0.28)",
+  purple:"#B05AD9",purpleSoft:"rgba(176,90,217,0.10)",purpleBdr:"rgba(176,90,217,0.28)",
 };
 const EVT=[C.accent,C.blue,C.pink,C.lime,C.purple];
 const GEO=["#D9AA5A","#C49A4E","#AF8A42","#9A7A36","#856A2A","#705A1E","#5B4A12","#463A06","#3A3000","#2E2600"];
+
+// ─── Typography & spacing tokens ─────────────────────────────────────────────
 const font=`'DM Sans',sans-serif`;
 const mono=`'JetBrains Mono',monospace`;
+// Type scale
+const T={display:32,h1:22,h2:18,body:14,small:13,caption:12,eyebrow:10};
+// Spacing scale — multiples of 4. Use these for consistent rhythm.
+const S={xs:4,sm:8,md:12,lg:16,xl:24,xxl:32,xxxl:48,giant:64};
+// Section category colors — drive accent stripes on SectionCard
+const SECTION_COLORS={
+  analytics:C.accent,health:C.accent,kpis:C.accent,
+  traffic:C.blue,audience:C.blue,geo:C.accent,events:C.purple,channels:C.lime,
+  content:C.lime,calendar:C.lime,queue:C.lime,topic:C.accent,tone:C.accent,drafts:C.accent,thread:C.blue,article:C.purple,
+  utm:C.pink,builder:C.pink,history:C.pink,
+  settings:C.muted,context:C.lime,brand:C.purple,integrations:C.blue,site:C.accent,defaults:C.accent,
+};
 
 // ─── Supabase Configuration ──────────────────────────────────────────────────
 const SUPABASE_URL="https://zzxmpemfozerswguzoaz.supabase.co";
@@ -277,7 +328,27 @@ function useAnalyticsData(cfg,site,rangeId,compareMode) {
 // ─── Shared UI Components ────────────────────────────────────────────────────
 const Tip=({active,payload,label})=>{if(!active||!payload?.length)return null;return (<div style={{background:"#1A1F25",border:`1px solid ${C.border}`,borderRadius:8,padding:"10px 14px",fontSize:12,fontFamily:mono}}><div style={{color:C.muted,marginBottom:6}}>{label}</div>{payload.map((p,i)=>(<div key={i} style={{color:p.color,marginBottom:2}}>{p.name}: {fmt(p.value)}</div>))}</div>);};
 const Dot=({color})=><span style={{display:"inline-block",width:8,height:8,borderRadius:"50%",background:color,marginRight:6,verticalAlign:"middle"}}/>;
-const Heading=({children,desc})=>(<div style={{marginBottom:16,marginTop:8}}><div style={{fontSize:14,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.08em"}}>{children}</div>{desc&&<div style={{fontSize:12,color:C.dim,marginTop:6,lineHeight:1.5,fontWeight:400,textTransform:"none",letterSpacing:"normal"}}>{desc}</div>}</div>);
+// Small uppercase tracked label — sits ABOVE a heading or in a card corner
+const Eyebrow=({children,color})=>(<div style={{fontSize:T.eyebrow,fontWeight:600,color:color||C.muted,textTransform:"uppercase",letterSpacing:"0.10em",fontFamily:font}}>{children}</div>);
+
+// Section heading: large bright H2 + optional description + optional eyebrow.
+// Designed to sit inside a SectionCard; pass `inline` to use outside cards.
+const Heading=({children,desc,eyebrow,accent,inline})=>(<div style={{marginBottom:inline?S.lg:S.lg,marginTop:inline?S.sm:0}}>
+  {eyebrow&&<div style={{marginBottom:S.xs}}><Eyebrow color={accent||C.muted}>{eyebrow}</Eyebrow></div>}
+  <div style={{fontSize:T.h2,fontWeight:600,color:C.bright,letterSpacing:"-0.01em",lineHeight:1.2,fontFamily:font}}>{children}</div>
+  {accent&&<div style={{width:40,height:2,borderRadius:1,background:accent,marginTop:S.sm,opacity:0.7}}/>}
+  {desc&&<div style={{fontSize:T.caption,color:C.dim,marginTop:S.sm,lineHeight:1.55,maxWidth:680}}>{desc}</div>}
+</div>);
+
+// SectionCard — every major page section sits inside one of these. Optional
+// `accent` paints a 3px gradient stripe across the top edge for category color.
+const SectionCard=({children,accent,style,inset,padding,...rest})=>{
+  const pad=padding||S.xl+S.xs; // 28px default
+  return (<section {...rest} style={{position:"relative",background:inset?C.surfaceInset:C.surface,border:`1px solid ${C.border}`,borderRadius:16,padding:pad,marginBottom:S.xxxl,...(style||{})}}>
+    {accent&&<div className="accent-stripe" style={{background:`linear-gradient(90deg,${accent} 0%,${accent} 30%,transparent 100%)`,opacity:0.8}}/>}
+    {children}
+  </section>);
+};
 
 const BTable=({title,data})=>{const mx=data?.length?Math.max(...data.map(d=>d.value)):1;
   if(!data?.length)return (<div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"16px 18px"}}><div style={{fontSize:12,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:14}}>{title}</div><div style={{fontSize:12,color:C.dim,padding:"12px 0"}}>No data yet</div></div>);
