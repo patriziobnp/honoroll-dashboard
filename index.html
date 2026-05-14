@@ -326,8 +326,8 @@ function useAnalyticsData(cfg,site,rangeId,compareMode) {
 }
 
 // ─── Shared UI Components ────────────────────────────────────────────────────
-const Tip=({active,payload,label})=>{if(!active||!payload?.length)return null;return (<div style={{background:"#1A1F25",border:`1px solid ${C.border}`,borderRadius:8,padding:"10px 14px",fontSize:12,fontFamily:mono}}><div style={{color:C.muted,marginBottom:6}}>{label}</div>{payload.map((p,i)=>(<div key={i} style={{color:p.color,marginBottom:2}}>{p.name}: {fmt(p.value)}</div>))}</div>);};
-const Dot=({color})=><span style={{display:"inline-block",width:8,height:8,borderRadius:"50%",background:color,marginRight:6,verticalAlign:"middle"}}/>;
+const Tip=({active,payload,label})=>{if(!active||!payload?.length)return null;return (<div style={{background:"rgba(22,26,32,0.94)",backdropFilter:"blur(10px)",WebkitBackdropFilter:"blur(10px)",border:`1px solid ${C.borderStrong}`,borderRadius:10,padding:`${S.md-2}px ${S.lg-2}px`,fontSize:T.caption,fontFamily:mono,boxShadow:"0 8px 24px rgba(0,0,0,0.4)"}}><div style={{color:C.muted,marginBottom:S.sm-2,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em",fontSize:T.eyebrow}}>{label}</div>{payload.map((p,i)=>(<div key={i} style={{color:p.color,marginBottom:S.xs/2,display:"flex",alignItems:"center",gap:S.sm}} className="tabnum"><span style={{width:8,height:8,borderRadius:"50%",background:p.color}}/><span style={{color:C.text}}>{p.name}:</span><span style={{fontWeight:600,color:C.bright,marginLeft:"auto"}}>{fmt(p.value)}</span></div>))}</div>);};
+const Dot=({color})=><span style={{display:"inline-block",width:8,height:8,borderRadius:"50%",background:color,marginRight:S.xs+2,verticalAlign:"middle"}}/>;
 // Small uppercase tracked label — sits ABOVE a heading or in a card corner
 const Eyebrow=({children,color})=>(<div style={{fontSize:T.eyebrow,fontWeight:600,color:color||C.muted,textTransform:"uppercase",letterSpacing:"0.10em",fontFamily:font}}>{children}</div>);
 
@@ -350,11 +350,45 @@ const SectionCard=({children,accent,style,inset,padding,...rest})=>{
   </section>);
 };
 
-const BTable=({title,data})=>{const mx=data?.length?Math.max(...data.map(d=>d.value)):1;
-  if(!data?.length)return (<div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"16px 18px"}}><div style={{fontSize:12,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:14}}>{title}</div><div style={{fontSize:12,color:C.dim,padding:"12px 0"}}>No data yet</div></div>);
-  return (<div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"16px 18px"}}><div style={{fontSize:12,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:14}}>{title}</div>{data.map((d,i)=>(<div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 0",borderBottom:"1px solid rgba(200,205,211,0.04)",position:"relative"}}><div style={{position:"absolute",left:0,top:0,bottom:0,width:`${(d.value/mx)*100}%`,background:C.accentSoft,borderRadius:4}}/><span style={{color:C.text,fontFamily:mono,fontSize:12,zIndex:1,maxWidth:"70%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.name}</span><span style={{color:C.muted,fontFamily:mono,fontSize:12,fontWeight:500,zIndex:1}}>{fmt(d.value)}</span></div>))}</div>);};
+// BTable — ranked list with subtle volume bar background, alt-row tint, hover lift
+const BTable=({title,data,color})=>{const mx=data?.length?Math.max(...data.map(d=>d.value)):1;
+  const barColor=color||C.accent;
+  if(!data?.length)return (<div style={{background:C.surfaceElevated,border:`1px solid ${C.border}`,borderRadius:12,padding:`${S.lg-2}px ${S.lg+2}px`}}>
+    <div style={{marginBottom:S.md+2}}><Eyebrow>{title}</Eyebrow></div>
+    <div style={{fontSize:T.caption,color:C.dim,padding:`${S.md}px 0`,fontFamily:mono}}>No data yet</div>
+  </div>);
+  return (<div className="tile-hover" style={{background:C.surfaceElevated,border:`1px solid ${C.border}`,borderRadius:12,padding:`${S.lg-2}px ${S.lg+2}px`}}>
+    <div style={{marginBottom:S.md+2,display:"flex",justifyContent:"space-between",alignItems:"baseline"}}>
+      <Eyebrow>{title}</Eyebrow>
+      <span style={{fontSize:T.eyebrow,fontFamily:mono,color:C.faint}} className="tabnum">{data.length} rows</span>
+    </div>
+    {data.map((d,i)=>(<div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:`${S.sm-1}px ${S.sm-1}px`,borderRadius:6,position:"relative",marginBottom:1,background:i%2?"transparent":C.surfaceInset}}>
+      <div style={{position:"absolute",left:0,top:0,bottom:0,width:`${(d.value/mx)*100}%`,background:`linear-gradient(90deg,${barColor}22,${barColor}08)`,borderRadius:6,pointerEvents:"none"}}/>
+      <span style={{color:C.text,fontFamily:mono,fontSize:T.caption,zIndex:1,maxWidth:"68%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.name}</span>
+      <span style={{color:C.bright,fontFamily:mono,fontSize:T.caption,fontWeight:600,zIndex:1}} className="tabnum">{fmt(d.value)}</span>
+    </div>))}
+  </div>);};
 
-const KPI=({label,value,prev,suffix,invertDelta,sub,showDelta=true,compareLabel})=>{const d=pctD(parseFloat(value),parseFloat(prev));const up=invertDelta?!d.up:d.up;return (<div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"20px 22px"}}><div style={{fontSize:12,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em",fontWeight:500,marginBottom:8}}>{label}</div><div style={{fontSize:28,fontWeight:700,color:C.bright,fontFamily:mono,letterSpacing:"-0.03em",lineHeight:1}}>{typeof value==="number"?fmt(value):value}{suffix&&<span style={{fontSize:16,color:C.muted,marginLeft:2}}>{suffix}</span>}</div>{showDelta&&<div style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:12,fontWeight:500,fontFamily:mono,color:up?C.green:C.red,marginTop:10,padding:"3px 8px",background:up?C.greenSoft:C.redSoft,borderRadius:6}} title={compareLabel?`vs ${compareLabel}`:""}><span>{up?"↑":"↓"}</span><span>{d.v}%</span></div>}{sub&&<div style={{fontSize:11,color:C.dim,marginTop:8,fontFamily:mono}}>{sub}</div>}{showDelta&&compareLabel&&<div style={{fontSize:10,color:C.dim,marginTop:6,fontFamily:mono}}>vs {compareLabel}</div>}</div>);};
+// KPI tile — big tabular-nums display number, delta chip pinned top-right
+const KPI=({label,value,prev,suffix,invertDelta,sub,showDelta=true,compareLabel})=>{
+  const d=pctD(parseFloat(value),parseFloat(prev));
+  const up=invertDelta?!d.up:d.up;
+  const deltaColor=up?C.green:C.red;
+  const deltaSoft=up?C.greenSoft:C.redSoft;
+  const deltaBdr=up?C.greenBdr:C.redBdr;
+  return (<div className="tile-hover" style={{background:C.surfaceElevated,border:`1px solid ${C.border}`,borderRadius:14,padding:`${S.xl}px ${S.xl}px ${S.lg+2}px`,position:"relative",overflow:"hidden"}}>
+    {showDelta&&<div style={{position:"absolute",top:S.md,right:S.md,display:"inline-flex",alignItems:"center",gap:S.xs,fontSize:T.eyebrow+1,fontWeight:700,fontFamily:mono,color:deltaColor,padding:`${S.xs-1}px ${S.sm}px`,background:deltaSoft,border:`1px solid ${deltaBdr}`,borderRadius:6}} title={compareLabel?`vs ${compareLabel}`:""} className="tabnum">
+      <span style={{lineHeight:1}}>{up?"▲":"▼"}</span><span>{d.v}%</span>
+    </div>}
+    <div style={{marginBottom:S.md+2}}><Eyebrow>{label}</Eyebrow></div>
+    <div style={{fontSize:38,fontWeight:700,color:C.bright,fontFamily:font,letterSpacing:"-0.03em",lineHeight:1}} className="tabnum">
+      {typeof value==="number"?fmt(value):value}
+      {suffix&&<span style={{fontSize:20,color:C.muted,marginLeft:2,fontWeight:500}}>{suffix}</span>}
+    </div>
+    {sub&&<div style={{fontSize:T.caption-1,color:C.dim,marginTop:S.md,fontFamily:mono}} className="tabnum">{sub}</div>}
+    {showDelta&&compareLabel&&<div style={{fontSize:T.eyebrow,color:C.faint,marginTop:S.sm-1,fontFamily:mono,textTransform:"uppercase",letterSpacing:"0.08em"}}>vs {compareLabel}</div>}
+  </div>);
+};
 
 // ─── Date Range Selector ─────────────────────────────────────────────────────
 const DateRangeSelector=({value,onChange})=>(<div style={{display:"flex",gap:4,flexWrap:"wrap"}}>{DATE_RANGES.map(r=>(<button key={r.id} onClick={()=>onChange(r.id)} style={{padding:"6px 14px",fontSize:12,fontFamily:font,fontWeight:value===r.id?600:400,color:value===r.id?C.bg:C.muted,background:value===r.id?C.accent:"rgba(200,205,211,0.04)",border:value===r.id?"none":`1px solid ${C.border}`,borderRadius:6,cursor:"pointer",transition:"all 0.15s"}}>{r.label}</button>))}</div>);
