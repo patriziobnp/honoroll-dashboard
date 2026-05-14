@@ -124,8 +124,10 @@ const HonorollMark=({size=32,radius=10,glow=true})=>(<span style={{display:"inli
   </svg>
 </span>);
 
-// Subtle radial wash placed behind a page's top section to anchor brand color
-const PageBackdrop=({color})=>(<div aria-hidden="true" style={{position:"absolute",top:-40,left:0,right:0,height:240,background:`radial-gradient(circle at 18% 30%, ${color||"rgba(217,170,90,0.06)"}, transparent 55%)`,pointerEvents:"none",zIndex:0}}/>);
+// Subtle radial wash placed behind a page's top section to anchor brand color.
+// Inset horizontally by the page padding so the gradient stays inside the
+// card column instead of bleeding into the page gutter.
+const PageBackdrop=({color})=>(<div aria-hidden="true" style={{position:"absolute",top:0,left:S.xxl-4,right:S.xxl-4,height:200,borderRadius:16,background:`radial-gradient(circle at 18% 30%, ${color||"rgba(217,170,90,0.06)"}, transparent 55%)`,pointerEvents:"none",zIndex:0}}/>);
 
 // ─── Security helpers ────────────────────────────────────────────────────────
 // Fetch wrapper that attaches the current Supabase access token to every
