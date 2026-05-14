@@ -115,6 +115,18 @@ const getSupabase=()=>{
 const IS_DEV=typeof window!=="undefined"&&/^(localhost|127\.0\.0\.1|\[::1\])$/.test(window.location.hostname);
 const debugLog=IS_DEV?console.error.bind(console):()=>{};
 
+// ─── Brand monogram ──────────────────────────────────────────────────────────
+// Stylised Honoroll "H" — two strokes connected by a notched bar, signaling
+// the cut/honor mark. Rendered in SVG for crisp display at any size.
+const HonorollMark=({size=32,radius=10,glow=true})=>(<span style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:size,height:size,borderRadius:radius,background:`linear-gradient(135deg,${C.accent} 0%,${C.accentBright} 100%)`,boxShadow:glow?"0 4px 14px rgba(217,170,90,0.28)":"none",flexShrink:0}}>
+  <svg width={Math.round(size*0.62)} height={Math.round(size*0.62)} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path d="M5 4v16M19 4v16M5 12h14M9 9.5h6v5H9z" stroke="#0A0D11" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"/>
+  </svg>
+</span>);
+
+// Subtle radial wash placed behind a page's top section to anchor brand color
+const PageBackdrop=({color})=>(<div aria-hidden="true" style={{position:"absolute",top:-40,left:0,right:0,height:240,background:`radial-gradient(circle at 18% 30%, ${color||"rgba(217,170,90,0.06)"}, transparent 55%)`,pointerEvents:"none",zIndex:0}}/>);
+
 // ─── Security helpers ────────────────────────────────────────────────────────
 // Fetch wrapper that attaches the current Supabase access token to every
 // request to our authenticated proxies (/api/groq, /api/umami, /api/seo).
@@ -649,8 +661,7 @@ const Dashboard=({cfg,site,useMock,onSettings,rangeId,onRangeChange,compareMode,
   const compareLabel=getCompareLabel(rangeId,compareMode);
   const showDeltas=compareMode!=="none"&&rangeId!=="all";
   return (<div style={{maxWidth:1280,margin:"0 auto",padding:`${S.xl}px ${S.xxl-4}px`,position:"relative"}}>
-    {/* Subtle radial backdrop anchoring brand identity behind the header */}
-    <div style={{position:"absolute",top:-40,left:0,right:0,height:240,background:"radial-gradient(circle at 18% 30%, rgba(217,170,90,0.06), transparent 55%)",pointerEvents:"none",zIndex:0}}/>
+    <PageBackdrop color="rgba(217,170,90,0.07)"/>
     {/* Top header: site name + active visitors */}
     <div style={{position:"relative",zIndex:1,display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:S.xxxl,paddingBottom:S.xl,borderBottom:`1px solid ${C.border}`,flexWrap:"wrap",gap:S.lg}}>
       <div>
@@ -1767,8 +1778,9 @@ const ContentPage=({analyticsData,contentState,setContentState,contextFiles,defa
   </div>);
 
   return (<div style={{maxWidth:1280,margin:"0 auto",padding:`${S.xl}px ${S.lg+4}px`,position:"relative"}}>
+    <PageBackdrop color="rgba(140,217,90,0.06)"/>
     {/* Top header */}
-    <div style={{marginBottom:S.xxxl,paddingBottom:S.xl,borderBottom:`1px solid ${C.border}`}}>
+    <div style={{position:"relative",zIndex:1,marginBottom:S.xxxl,paddingBottom:S.xl,borderBottom:`1px solid ${C.border}`}}>
       <Eyebrow color={SECTION_COLORS.content}>Content</Eyebrow>
       <h1 style={{fontFamily:font,fontSize:T.display,fontWeight:700,color:C.bright,letterSpacing:"-0.02em",margin:`${S.xs}px 0 0`,lineHeight:1.05}}>Drafts & Calendar</h1>
     </div>
@@ -1978,9 +1990,10 @@ const UtmPage=({utmLinks})=>{
 
   const uniqueSources=[...new Set(utmHistory.map(h=>h.source))];
 
-  return (<div style={{maxWidth:1280,margin:"0 auto",padding:`${S.xl}px ${S.lg+4}px`}}>
+  return (<div style={{maxWidth:1280,margin:"0 auto",padding:`${S.xl}px ${S.lg+4}px`,position:"relative"}}>
+    <PageBackdrop color="rgba(217,90,140,0.06)"/>
     {/* Top header */}
-    <div style={{marginBottom:S.xxxl,paddingBottom:S.xl,borderBottom:`1px solid ${C.border}`}}>
+    <div style={{position:"relative",zIndex:1,marginBottom:S.xxxl,paddingBottom:S.xl,borderBottom:`1px solid ${C.border}`}}>
       <Eyebrow color={SECTION_COLORS.utm}>Tracking</Eyebrow>
       <h1 style={{fontFamily:font,fontSize:T.display,fontWeight:700,color:C.bright,letterSpacing:"-0.02em",margin:`${S.xs}px 0 0`,lineHeight:1.05}}>UTM links</h1>
     </div>
@@ -2083,7 +2096,7 @@ const Header=({active,onChange,onSettings,settingsActive,user,onSignOut})=>{
     <div style={{maxWidth:1280,margin:"0 auto",padding:`${S.md+2}px ${S.lg+4}px`,display:"flex",alignItems:"center",gap:S.xxl,flexWrap:"wrap"}}>
       {/* Logo */}
       <div style={{display:"flex",alignItems:"center",gap:S.md-2,flexShrink:0}}>
-        <div style={{width:32,height:32,borderRadius:10,background:`linear-gradient(135deg,${C.accent},${C.accentBright})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,fontWeight:800,color:C.bg,boxShadow:"0 4px 12px rgba(217,170,90,0.25)"}}>H</div>
+        <HonorollMark size={32} radius={10}/>
         <div style={{fontSize:T.body+3,fontWeight:700,color:C.bright,letterSpacing:"-0.015em"}}>Honoroll</div>
       </div>
       {/* Tabs as Linear-style segmented control */}
@@ -2126,8 +2139,9 @@ const SettingsPage=({ctxFiles,brandAssets,defaults,onUpdateDefaults})=>{
   const[showContext,setShowContext]=useState(true);
   const[showAssets,setShowAssets]=useState(true);
 
-  return (<div style={{maxWidth:1280,margin:"0 auto",padding:`${S.xl}px ${S.lg+4}px`}}>
-    <div style={{marginBottom:S.xxxl,paddingBottom:S.xl,borderBottom:`1px solid ${C.border}`}}>
+  return (<div style={{maxWidth:1280,margin:"0 auto",padding:`${S.xl}px ${S.lg+4}px`,position:"relative"}}>
+    <PageBackdrop color="rgba(176,90,217,0.05)"/>
+    <div style={{position:"relative",zIndex:1,marginBottom:S.xxxl,paddingBottom:S.xl,borderBottom:`1px solid ${C.border}`}}>
       <Eyebrow color={C.muted}>Settings</Eyebrow>
       <h1 style={{fontFamily:font,fontSize:T.display,fontWeight:700,color:C.bright,letterSpacing:"-0.02em",margin:`${S.xs}px 0 0`,lineHeight:1.05}}>Configuration</h1>
       <div style={{fontSize:T.small,color:C.muted,marginTop:S.sm}}>Manage context, brand, integrations, and defaults.</div>
@@ -2768,9 +2782,12 @@ const MOCK_DATA=(()=>{
 // Outer App: only auth-related hooks live here. Either renders LoginScreen or AuthenticatedApp.
 function App(){
   const{user,loading:authLoading,signOut}=useAuth();
-  if(authLoading) return (<div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:C.bg}}><div style={{display:"flex",gap:6}}>{[0,1,2].map(i=>(<div key={i} style={{width:8,height:8,borderRadius:"50%",background:C.accent,animation:`pulse 1.2s ease-in-out ${i*0.2}s infinite`}}/>))}</div></div>);
-  if(!user) return <LoginScreen/>;
-  return <AuthenticatedApp user={user} signOut={signOut}/>;
+  // Fires once per page load — accent line slides across the top, then unmounts.
+  const[showShimmer,setShowShimmer]=useState(true);
+  useEffect(()=>{const t=setTimeout(()=>setShowShimmer(false),1800);return()=>clearTimeout(t);},[]);
+  if(authLoading) return (<div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:C.bg}}>{showShimmer&&<div className="page-shimmer"/>}<div style={{display:"flex",gap:6}}>{[0,1,2].map(i=>(<div key={i} style={{width:8,height:8,borderRadius:"50%",background:C.accent,animation:`pulse 1.2s ease-in-out ${i*0.2}s infinite`}}/>))}</div></div>);
+  if(!user) return (<>{showShimmer&&<div className="page-shimmer"/>}<LoginScreen/></>);
+  return (<>{showShimmer&&<div className="page-shimmer"/>}<AuthenticatedApp user={user} signOut={signOut}/></>);
 }
 
 // All the dashboard hooks/logic live here, only mounted when user is authenticated.
