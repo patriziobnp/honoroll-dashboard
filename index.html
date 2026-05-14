@@ -235,9 +235,13 @@ function useAnalyticsData(cfg,site,rangeId,compareMode) {
           if(cached.seoAudit)seoAudit=cached.seoAudit;
         }}
       }catch(e){}
+      let siteHealthError=null;
       if(!pageSpeed||!seoAudit){
         try{const psiRes=await authedFetch(`/api/pagespeed?domain=${encodeURIComponent(site.domain)}`);
-          if(psiRes.ok){const psi=await psiRes.json();const lh=psi.lighthouseResult||{};const cats=lh.categories||{};const a=lh.audits||{};
+          if(!psiRes.ok){
+            let body="";try{const j=await psiRes.json();body=j.error||"";}catch(e){body=await psiRes.text().catch(()=>"");}
+            siteHealthError=`PageSpeed ${psiRes.status}: ${String(body).slice(0,140)}`;
+          }else{const psi=await psiRes.json();const lh=psi.lighthouseResult||{};const cats=lh.categories||{};const a=lh.audits||{};
             pageSpeed={performance:Math.round((cats.performance?.score||0)*100),seo:Math.round((cats.seo?.score||0)*100),accessibility:Math.round((cats.accessibility?.score||0)*100),
               vitals:{LCP:{value:a["largest-contentful-paint"]?.displayValue||"—",rating:a["largest-contentful-paint"]?.score>=0.9?"good":a["largest-contentful-paint"]?.score>=0.5?"needs-improvement":"poor"},
                 FCP:{value:a["first-contentful-paint"]?.displayValue||"—",rating:a["first-contentful-paint"]?.score>=0.9?"good":a["first-contentful-paint"]?.score>=0.5?"needs-improvement":"poor"},
@@ -257,13 +261,13 @@ function useAnalyticsData(cfg,site,rangeId,compareMode) {
               seoAudit={score,grade,priorities};
             }
             try{if(typeof localStorage!=="undefined")localStorage.setItem(psiCacheKey,JSON.stringify({timestamp:Date.now(),pageSpeed,seoAudit}));}catch(e){}
-          }}catch(e){}
+          }}catch(e){siteHealthError=e.message||"Failed to reach PageSpeed";}
       }
       setData({statsToday,statsYesterday,active:active.visitors||0,timeSeries:timeData,unit,
         pages:fmtM(pages),referrers:fmtM(referrers),countries:fmtM(countries).map(c=>({...c,code:c.name.length===2?c.name:""})),
         browsers:fmtM(browsers),devices:fmtM(devices),os:fmtM(os),events:fmtM(events),
         eventSeries:Object.values(eventsByHour).sort((a,b)=>a.label.localeCompare(b.label)),topEventNames:[...eventNames].slice(0,5),
-        channels:fmtM(channels),pageSpeed,seoAudit});
+        channels:fmtM(channels),pageSpeed,seoAudit,siteHealthError});
     }catch(e){setError(e.message);}finally{setLoading(false);}
   },[cfg,site,rangeId,compareMode]);
   useEffect(()=>{fetchAll();},[fetchAll]);
@@ -553,7 +557,14 @@ const Dashboard=({cfg,site,useMock,onSettings,rangeId,onRangeChange,compareMode,
     {/* AI Insights — has its own date range internally */}
     <AIInsights analyticsData={data} contextFiles={contextFiles}/>
     {/* Site Health */}
-    {(data.pageSpeed||data.seoAudit)&&<><Heading desc="Google Lighthouse via PageSpeed Insights. Current state, refreshed once per day.">Site Health</Heading><SiteHealth pagespeed={data.pageSpeed} seoscore={data.seoAudit}/></>}
+    {(data.pageSpeed||data.seoAudit||data.siteHealthError)&&<><Heading desc="Google Lighthouse via PageSpeed Insights. Current state, refreshed once per day.">Site Health</Heading>
+      {(data.pageSpeed||data.seoAudit)?<SiteHealth pagespeed={data.pageSpeed} seoscore={data.seoAudit}/>
+      :<div style={{background:C.redSoft,border:"1px solid rgba(248,113,113,0.2)",borderRadius:12,padding:"16px 20px",marginBottom:24,fontSize:13,color:C.red}}>
+        <div style={{fontWeight:600,marginBottom:4}}>Site Health unavailable</div>
+        <div style={{fontSize:12,color:C.text,lineHeight:1.5}}>{data.siteHealthError}</div>
+        <div style={{fontSize:11,color:C.dim,marginTop:8,fontFamily:mono}}>Common causes: PageSpeed Insights timing out (Lighthouse takes 20-30s; raised function timeout to 60s but the API itself may still time out), Google quota exhausted, or the domain unreachable.</div>
+      </div>}
+    </>}
     {/* Sticky range bar — controls everything below */}
     <StickyRangeBar rangeId={rangeId} onRangeChange={onRangeChange} compareMode={compareMode} onCompareChange={onCompareChange} onRefresh={handleRefresh} lastUpdated={lastUpdated} refreshing={refreshing||loading}/>
     {/* KPIs */}

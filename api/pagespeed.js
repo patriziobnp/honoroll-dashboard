@@ -1,5 +1,9 @@
 import { requireAuth } from "./_auth.js";
 
+// PageSpeed/Lighthouse runs are slow (15-30s typical). Override Vercel's
+// 10s default function timeout so the call has room to finish.
+export const config = { maxDuration: 60 };
+
 // PageSpeed Insights proxy. Routes the Google API call through the server so
 // we can (1) require a Supabase JWT (no anonymous abuse), (2) attach a key
 // when one is configured to lift the anonymous-tier quota, and (3) cache the
