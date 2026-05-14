@@ -543,12 +543,53 @@ const TONES=[
 const ToneSelector=({value,onChange})=>(<div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:20}}>{TONES.map(t=>(<button key={t.id} onClick={()=>onChange(t.id)} style={{padding:"8px 16px",fontSize:12,fontFamily:font,fontWeight:value===t.id?600:400,color:value===t.id?C.bg:C.muted,background:value===t.id?C.accent:"rgba(200,205,211,0.04)",border:value===t.id?"none":`1px solid ${C.border}`,borderRadius:8,cursor:"pointer",transition:"all 0.15s"}} title={t.desc}>{t.label}</button>))}</div>);
 
 const TONE_INSTRUCTIONS={
-  founder:"Write in first person as the founder. Personal, reflective, building-in-public energy. Share genuine lessons and thoughts.",
-  product:"Focus on what the product does and why it matters. Exciting but grounded. Highlight features and benefits.",
-  community:"Celebrate the community and users. Grateful, inclusive tone. Highlight collective growth and milestones.",
-  industry:"Position as a thought leader. Analyze industry trends, challenge conventional wisdom. Insightful and authoritative.",
-  provocative:"Make bold claims. Challenge the status quo. Be edgy but smart. Designed to spark conversation and debate.",
+  founder:`FOUNDER VOICE.
+- Write in first person ("I", "we") as the founder, not as a marketing department.
+- Lead with a personal observation, lesson, or doubt. Building-in-public energy.
+- Acknowledge nuance and trade-offs. Avoid hype words like "revolutionary", "game-changing".
+- Opening patterns: "I keep coming back to…", "One thing I got wrong…", "Today I…", "After N months of…".
+- DO: be specific, name real situations, admit uncertainty.
+- DON'T: sound like a press release. No corporate "we are excited to announce".`,
+  product:`PRODUCT UPDATE.
+- Focus on what the product does, what's new, and the concrete user benefit.
+- Lead with the change or capability, not the abstraction. Specifics over slogans.
+- Brief, factual, energetic but grounded. Make the value obvious in one read.
+- Opening patterns: "You can now…", "Shipped:", "New:", "We just made X faster/safer/cheaper".
+- DO: name the feature, describe what it unlocks, link to docs if relevant.
+- DON'T: open with "we're thrilled". Skip vague claims like "best in class".`,
+  community:`COMMUNITY.
+- Celebrate users, builders, and contributors. Credit goes outward, not inward.
+- Highlight collective milestones, user stories, or community signal.
+- Warm, inclusive, plural-first. The brand is a participant, not the protagonist.
+- Opening patterns: "Shoutout to…", "The community just…", "N people just…", "Watching y'all build…".
+- DO: name people/handles when possible, quote users, surface their work.
+- DON'T: make the brand the hero. No "we built this for you" framing.`,
+  industry:`INDUSTRY COMMENTARY.
+- Position as a thoughtful analyst of the wider industry, not a vendor pitching.
+- Take a specific position on a trend, claim, or common assumption.
+- Insightful and authoritative; reference real dynamics, players, or shifts.
+- Opening patterns: "The crypto casino category is…", "Most people get X wrong about…", "Here's what's actually changing in…", "Three things to watch in…".
+- DO: name competitors/categories, cite specifics, make a clear claim.
+- DON'T: be generic. No "the industry is evolving". Mention the brand only as one data point.`,
+  provocative:`PROVOCATIVE.
+- Make a bold, specific claim. Pick a fight with conventional wisdom or a sloppy idea in the space.
+- Sharp, confident, slightly contrarian. Smart-edgy, not edgelord.
+- One clear thesis per post. Designed to spark replies, quote-tweets, debate.
+- Opening patterns: "Unpopular opinion:", "The dirty secret about…", "Most X is a lie. Here's why.", "If you still believe X, you're not paying attention.".
+- DO: stake a position, name what you're against, end on a hook that invites disagreement.
+- DON'T: be vague or hedged. No "in my humble opinion". No insults — argue the idea, not the person.`,
 };
+
+// Optional topic templates surfaced in the "What to write about" picker.
+// `seed` is dropped into the topic textarea with ___ blanks for the user to fill.
+const CONTENT_PROMPT_TEMPLATES=[
+  {id:"launch",label:"Launch announcement",seed:"We just shipped ___. Explain what it is, why it matters, and the concrete user impact."},
+  {id:"feature",label:"Feature explainer",seed:"Walk through ___. Use plain language. Lead with the user problem it solves and what changes for the player."},
+  {id:"hot-take",label:"Industry hot-take",seed:"Take a position on ___. Be specific about what most people in the crypto/casino space get wrong, and why."},
+  {id:"milestone",label:"Milestone celebration",seed:"Celebrate ___. Credit the community. Don't brag — explain why this milestone matters for what comes next."},
+  {id:"behind",label:"Behind the scenes",seed:"Share the story behind ___. Honest, building-in-public energy. Include what was hard and what we learned."},
+  {id:"compare",label:"Compare vs alternative",seed:"Compare how Honoroll handles ___ versus how traditional crypto casinos handle it. Be concrete."},
+];
 
 const LENGTH_INSTRUCTIONS={
   post:{short:"Keep each post SHORT: aim for ~80 characters, punchy one-liners. Maximum 120 characters.",normal:"Each post should be NORMAL length: aim for ~180 characters. Maximum 240 characters.",long:"Each post should be LONG: aim for ~250 characters, use the full available space. Maximum 280 characters."},
@@ -556,7 +597,20 @@ const LENGTH_INSTRUCTIONS={
   article:{short:"SHORT article: 300-400 words total. Concise and focused.",normal:"NORMAL article: 500-700 words. Standard long-form depth.",long:"LONG article: 800-1200 words. Deep dive with multiple sections."},
 };
 
-const makePrompt=(base,tone,length,type)=>`${base}\n\nTONE INSTRUCTION: ${TONE_INSTRUCTIONS[tone]||TONE_INSTRUCTIONS.founder}\n\nLENGTH INSTRUCTION: ${LENGTH_INSTRUCTIONS[type]?.[length]||LENGTH_INSTRUCTIONS[type]?.normal||""}`;
+// Strong directive prepended to every base content prompt: make the LLM
+// treat user-provided context (brand voice, product, audience) as primary truth.
+const CONTEXT_DIRECTIVE=`CRITICAL — CONTEXT USAGE:
+The user message contains a section wrapped in "=== USER-PROVIDED CONTEXT ===". That section is the PRIMARY source of truth for brand voice, product facts, audience, and current campaigns. You MUST:
+- Match the voice, vocabulary, and cadence described in the brand-voice files.
+- Use only product facts, features, and positioning from the product/audience/campaign files.
+- Adopt any do/don't, signature words, and forbidden words listed there.
+- If user context conflicts with your defaults, USER CONTEXT WINS.
+Generic AI prose, hype words, or made-up product details are not acceptable when this context is present.\n\n`;
+
+const makePrompt=(base,tone,length,type,topic)=>{
+  const topicLine=topic&&topic.trim()?`PRIMARY TOPIC FOR THIS GENERATION (treat as the central directive):\n${topic.trim()}\n\n`:"";
+  return `${CONTEXT_DIRECTIVE}${topicLine}${base}\n\nTONE INSTRUCTION: ${TONE_INSTRUCTIONS[tone]||TONE_INSTRUCTIONS.founder}\n\nLENGTH INSTRUCTION: ${LENGTH_INSTRUCTIONS[type]?.[length]||LENGTH_INSTRUCTIONS[type]?.normal||""}`;
+};
 
 const X_POST_PROMPT=`You generate X (Twitter) post drafts for Honoroll. Analytics data and competitor styles are INTERNAL CONTEXT ONLY.
 CRITICAL: NEVER include analytics numbers. No visitor counts, traffic %, pageviews, bounce rates, country data, performance scores. Write about the brand, vision, product, community.
@@ -1427,9 +1481,20 @@ const ArticleCard=({article,onUpdateBody,onUpdateHeadline,onSchedule,scheduledDa
 };
 
 // ─── Content Page ────────────────────────────────────────────────────────────
-const ContentPage=({analyticsData,contentState,setContentState,contextFiles,defaults,calendarEntries})=>{
+const ContentPage=({analyticsData,contentState,setContentState,contextFiles,defaults,onUpdateDefaults,calendarEntries})=>{
   const ctx=buildMarketingContext(analyticsData);
   const[tone,setTone]=useState(contentState.tone||defaults?.tone||"founder");
+  // Topic ("what to write about") is persisted in user_settings.content_topic
+  // and edited locally with a debounced upsert. Local mirror keeps typing snappy.
+  const[topic,setTopic]=useState(defaults?.contentTopic||"");
+  useEffect(()=>{if(typeof defaults?.contentTopic==="string"&&defaults.contentTopic!==topic){setTopic(defaults.contentTopic);}// eslint-disable-next-line
+  },[defaults?.contentTopic]);
+  const topicTimerRef=useRef(null);
+  const updateTopic=(next)=>{
+    setTopic(next);
+    if(topicTimerRef.current)clearTimeout(topicTimerRef.current);
+    topicTimerRef.current=setTimeout(()=>{if(onUpdateDefaults)onUpdateDefaults({contentTopic:next});},500);
+  };
   const{posts,thread,article}=contentState;
   const{entries:calendar,loading:calendarLoading,error:calendarError,addEntry,scheduleEntry,updateEntry,deleteEntry,uploadCalendarImage}=calendarEntries;
   const setPosts=(p)=>setContentState(s=>({...s,posts:p}));
@@ -1461,9 +1526,9 @@ const ContentPage=({analyticsData,contentState,setContentState,contextFiles,defa
   const userCtx=buildContextString(contextFiles);
   const fullCtx=`${COMPETITOR_CONTEXT}${userCtx}\n\nANALYTICS DATA:\n${ctx.summary}`;
 
-  const genPosts=async()=>{setPostsLoading(true);setPostsError("");try{const r=await generateContent(makePrompt(X_POST_PROMPT,tone,postLength,"post"),fullCtx);setPosts(r.posts||[]);}catch(e){setPostsError(e.message);}finally{setPostsLoading(false);}};
-  const genThread=async()=>{setThreadLoading(true);setThreadError("");try{const r=await generateContent(makePrompt(X_THREAD_PROMPT,tone,threadLength,"thread"),fullCtx);setThread(r.thread||[]);}catch(e){setThreadError(e.message);}finally{setThreadLoading(false);}};
-  const genArticle=async()=>{setArticleLoading(true);setArticleError("");try{const r=await generateArticle(makePrompt(X_ARTICLE_PROMPT,tone,articleLength,"article"),fullCtx);setArticle(r);}catch(e){setArticleError(e.message);}finally{setArticleLoading(false);}};
+  const genPosts=async()=>{setPostsLoading(true);setPostsError("");try{const r=await generateContent(makePrompt(X_POST_PROMPT,tone,postLength,"post",topic),fullCtx);setPosts(r.posts||[]);}catch(e){setPostsError(e.message);}finally{setPostsLoading(false);}};
+  const genThread=async()=>{setThreadLoading(true);setThreadError("");try{const r=await generateContent(makePrompt(X_THREAD_PROMPT,tone,threadLength,"thread",topic),fullCtx);setThread(r.thread||[]);}catch(e){setThreadError(e.message);}finally{setThreadLoading(false);}};
+  const genArticle=async()=>{setArticleLoading(true);setArticleError("");try{const r=await generateArticle(makePrompt(X_ARTICLE_PROMPT,tone,articleLength,"article",topic),fullCtx);setArticle(r);}catch(e){setArticleError(e.message);}finally{setArticleLoading(false);}};
   const formatThread=(arr)=>arr.map((t,i)=>`${i+1}/${arr.length}\n${t.tweet}`).join("\n\n---\n\n");
   const formatThreadTypefully=(arr)=>arr.map(t=>t.tweet).join("\n\n🧵\n\n");
 
@@ -1477,6 +1542,31 @@ const ContentPage=({analyticsData,contentState,setContentState,contextFiles,defa
     {/* Queue */}
     <Heading desc="Upcoming scheduled content and recent drafts.">Content Queue</Heading>
     <ContentQueue items={calendar} onUpdate={updateCalendarEntry} onDelete={deleteCalendarEntry}/>
+
+    {/* Prompt / Topic */}
+    <Heading desc="The central topic or angle every generator below will use. Leave blank to generate freely from your active context files.">What to write about</Heading>
+    <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"18px 20px",marginBottom:24}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end",gap:12,marginBottom:8,flexWrap:"wrap"}}>
+        <label style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em"}}>Topic / prompt</label>
+        <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+          <span style={{fontSize:10,color:C.dim,fontFamily:mono}}>Templates:</span>
+          {CONTENT_PROMPT_TEMPLATES.map(t=>(<button key={t.id} onClick={()=>updateTopic(t.seed)} title={t.seed} style={{padding:"4px 10px",fontSize:11,fontFamily:font,color:C.muted,background:"rgba(200,205,211,0.04)",border:`1px solid ${C.border}`,borderRadius:6,cursor:"pointer"}}>{t.label}</button>))}
+          {topic&&<button onClick={()=>updateTopic("")} title="Clear topic" style={{padding:"4px 10px",fontSize:11,fontFamily:mono,color:C.red,background:"none",border:`1px solid rgba(248,113,113,0.25)`,borderRadius:6,cursor:"pointer"}}>Clear</button>}
+        </div>
+      </div>
+      <textarea value={topic} onChange={e=>updateTopic(e.target.value)} placeholder="e.g. We just shipped commit-reveal RNG verification on Sapphire testnet. Explain what changes for players and why provability beats operator trust." style={{width:"100%",background:"rgba(200,205,211,0.05)",border:`1px solid ${C.border}`,borderRadius:8,padding:"12px 14px",fontSize:13,fontFamily:font,color:C.bright,outline:"none",resize:"vertical",lineHeight:1.6,boxSizing:"border-box",minHeight:90}}/>
+      {/* Active context indicator */}
+      {(() => {
+        const active=(contextFiles||[]).filter(f=>f.active);
+        const grouped=CONTEXT_CATEGORIES.map(cat=>({cat,count:active.filter(f=>f.category===cat.id).length})).filter(g=>g.count>0);
+        if(grouped.length===0)return (<div style={{marginTop:10,fontSize:11,color:C.dim,fontFamily:mono}}>⚠ No active context files. Open Settings → Context Files to enable some.</div>);
+        return (<div style={{marginTop:10,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+          <span style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em"}}>Using context</span>
+          {grouped.map(({cat,count})=>(<span key={cat.id} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"3px 8px",fontSize:10,fontFamily:mono,color:cat.color,background:`${cat.color}15`,border:`1px solid ${cat.color}30`,borderRadius:4}}>{cat.icon} {cat.label}{count>1?` ×${count}`:""}</span>))}
+        </div>);
+      })()}
+      <div style={{marginTop:8,fontSize:10,color:C.dim,fontFamily:mono,textAlign:"right"}}>{topic.length} chars</div>
+    </div>
 
     {/* Tone */}
     <Heading desc="Sets the voice for all generators below.">Tone</Heading>
@@ -1980,9 +2070,9 @@ const DEFAULT_AI_MODEL="llama-3.3-70b-versatile";
 const DEFAULT_SITE_NAME="Honoroll";
 const DEFAULT_SITE_DOMAIN="honoroll.io";
 const DEFAULT_UMAMI_WEBSITE_ID="b383e359-7384-45e0-81b4-0a33ba905df3";
-const DEFAULT_SETTINGS={tone:"founder",postLength:"normal",threadLength:"normal",articleLength:"normal",aiModel:DEFAULT_AI_MODEL,siteName:DEFAULT_SITE_NAME,siteDomain:DEFAULT_SITE_DOMAIN,umamiWebsiteId:DEFAULT_UMAMI_WEBSITE_ID,useMockData:false};
-const rowToSettings=(r)=>({tone:r.tone||"founder",postLength:r.post_length||"normal",threadLength:r.thread_length||"normal",articleLength:r.article_length||"normal",aiModel:r.ai_model||DEFAULT_AI_MODEL,siteName:r.site_name||DEFAULT_SITE_NAME,siteDomain:r.site_domain||DEFAULT_SITE_DOMAIN,umamiWebsiteId:r.umami_website_id||DEFAULT_UMAMI_WEBSITE_ID,useMockData:!!r.use_mock_data});
-const settingsToRow=(s,userId)=>({user_id:userId,tone:s.tone,post_length:s.postLength,thread_length:s.threadLength,article_length:s.articleLength,ai_model:s.aiModel||DEFAULT_AI_MODEL,site_name:s.siteName||DEFAULT_SITE_NAME,site_domain:s.siteDomain||DEFAULT_SITE_DOMAIN,umami_website_id:s.umamiWebsiteId||DEFAULT_UMAMI_WEBSITE_ID,use_mock_data:!!s.useMockData});
+const DEFAULT_SETTINGS={tone:"founder",postLength:"normal",threadLength:"normal",articleLength:"normal",aiModel:DEFAULT_AI_MODEL,siteName:DEFAULT_SITE_NAME,siteDomain:DEFAULT_SITE_DOMAIN,umamiWebsiteId:DEFAULT_UMAMI_WEBSITE_ID,useMockData:false,contentTopic:""};
+const rowToSettings=(r)=>({tone:r.tone||"founder",postLength:r.post_length||"normal",threadLength:r.thread_length||"normal",articleLength:r.article_length||"normal",aiModel:r.ai_model||DEFAULT_AI_MODEL,siteName:r.site_name||DEFAULT_SITE_NAME,siteDomain:r.site_domain||DEFAULT_SITE_DOMAIN,umamiWebsiteId:r.umami_website_id||DEFAULT_UMAMI_WEBSITE_ID,useMockData:!!r.use_mock_data,contentTopic:r.content_topic||""});
+const settingsToRow=(s,userId)=>({user_id:userId,tone:s.tone,post_length:s.postLength,thread_length:s.threadLength,article_length:s.articleLength,ai_model:s.aiModel||DEFAULT_AI_MODEL,site_name:s.siteName||DEFAULT_SITE_NAME,site_domain:s.siteDomain||DEFAULT_SITE_DOMAIN,umami_website_id:s.umamiWebsiteId||DEFAULT_UMAMI_WEBSITE_ID,use_mock_data:!!s.useMockData,content_topic:s.contentTopic||""});
 
 const useUserSettings=(user)=>{
   const[settings,setSettings]=useState(DEFAULT_SETTINGS);
@@ -2481,7 +2571,7 @@ function AuthenticatedApp({user,signOut}){
       {showSettings?(<div style={{animation:"fadeIn 0.3s ease-out"}}><SettingsPage ctxFiles={ctxFiles} brandAssets={brandAssets} defaults={userSettings.settings} onUpdateDefaults={userSettings.updateSettings}/></div>)
       :(<>
         {tab==="analytics"&&<div style={{animation:"fadeIn 0.3s ease-out"}}><Dashboard cfg={KEYS} site={site} useMock={useMock} onSettings={handleSettings} rangeId={rangeId} onRangeChange={setRangeId} compareMode={compareMode} onCompareChange={setCompareMode} contextFiles={ctxFiles.files}/></div>}
-        {tab==="content"&&<div style={{animation:"fadeIn 0.3s ease-out"}}><ContentPage analyticsData={MOCK_DATA} contentState={contentState} setContentState={setContentState} contextFiles={ctxFiles.files} defaults={userSettings.settings} calendarEntries={calendarEntries}/></div>}
+        {tab==="content"&&<div style={{animation:"fadeIn 0.3s ease-out"}}><ContentPage analyticsData={MOCK_DATA} contentState={contentState} setContentState={setContentState} contextFiles={ctxFiles.files} defaults={userSettings.settings} onUpdateDefaults={userSettings.updateSettings} calendarEntries={calendarEntries}/></div>}
         {tab==="utm"&&<div style={{animation:"fadeIn 0.3s ease-out"}}><UtmPage utmLinks={utmLinks}/></div>}
       </>)}
     </div>
