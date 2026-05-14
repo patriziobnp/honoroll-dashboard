@@ -378,20 +378,20 @@ const CompareSelector=({value,onChange,rangeId})=>{
 const StickyRangeBar=({rangeId,onRangeChange,compareMode,onCompareChange,onRefresh,lastUpdated,refreshing})=>{
   const ago=lastUpdated?Math.round((Date.now()-lastUpdated)/1000):0;
   const agoLabel=ago<60?`${ago}s ago`:ago<3600?`${Math.round(ago/60)}m ago`:ago<86400?`${Math.round(ago/3600)}h ago`:`${Math.round(ago/86400)}d ago`;
-  return (<div style={{position:"sticky",top:62,zIndex:30,marginBottom:24,background:"rgba(11,14,17,0.92)",backdropFilter:"blur(8px)",borderTop:`1px solid ${C.border}`,borderBottom:`1px solid ${C.border}`,padding:"12px 0",margin:"0 -28px 24px"}}>
-    <div style={{maxWidth:1224,margin:"0 auto",padding:"0 28px",display:"flex",alignItems:"center",gap:12,flexWrap:"wrap",justifyContent:"space-between"}}>
-      <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
-        <span style={{fontSize:10,fontFamily:mono,fontWeight:600,color:C.dim,textTransform:"uppercase",letterSpacing:"0.06em"}}>Showing</span>
+  return (<div style={{position:"sticky",top:64,zIndex:30,marginBottom:S.xxxl,background:"rgba(10,13,17,0.78)",backdropFilter:"blur(12px) saturate(140%)",WebkitBackdropFilter:"blur(12px) saturate(140%)",border:`1px solid ${C.borderStrong}`,borderRadius:14,padding:`${S.sm+2}px ${S.lg}px`}}>
+    <div style={{display:"flex",alignItems:"center",gap:S.md,flexWrap:"wrap",justifyContent:"space-between"}}>
+      <div style={{display:"flex",alignItems:"center",gap:S.md,flexWrap:"wrap"}}>
+        <Eyebrow>Showing</Eyebrow>
         <DateRangeSelector value={rangeId} onChange={onRangeChange}/>
         <CompareSelector value={compareMode} onChange={onCompareChange} rangeId={rangeId}/>
       </div>
-      <div style={{display:"flex",alignItems:"center",gap:10}}>
-        {refreshing&&(<span style={{display:"flex",alignItems:"center",gap:8,fontSize:11,fontFamily:mono,fontWeight:600,color:C.accent,padding:"4px 10px",background:C.accentSoft,border:`1px solid ${C.accent}40`,borderRadius:6,animation:"fadeIn 0.2s ease-out"}}>
+      <div style={{display:"flex",alignItems:"center",gap:S.md}}>
+        {refreshing&&(<span style={{display:"flex",alignItems:"center",gap:S.sm,fontSize:T.caption-1,fontFamily:mono,fontWeight:600,color:C.accent,padding:`${S.xs+1}px ${S.md-2}px`,background:C.accentSoft,border:`1px solid ${C.accentBdr}`,borderRadius:6,animation:"fadeIn 0.2s ease-out"}}>
           {[0,1,2].map(i=>(<span key={i} style={{width:4,height:4,borderRadius:"50%",background:C.accent,animation:`pulse 1.2s ease-in-out ${i*0.2}s infinite`}}/>))}
           Fetching data
         </span>)}
-        {!refreshing&&lastUpdated&&<span style={{fontSize:11,fontFamily:mono,color:C.dim}}>Updated {agoLabel}</span>}
-        <button onClick={onRefresh} disabled={refreshing} style={{padding:"6px 14px",fontSize:12,fontFamily:font,color:refreshing?C.dim:C.muted,background:"rgba(200,205,211,0.04)",border:`1px solid ${C.border}`,borderRadius:6,cursor:refreshing?"not-allowed":"pointer",display:"flex",alignItems:"center",gap:6}}>
+        {!refreshing&&lastUpdated&&<span style={{fontSize:T.caption-1,fontFamily:mono,color:C.dim}}>Updated {agoLabel}</span>}
+        <button onClick={onRefresh} disabled={refreshing} style={{padding:`${S.sm-2}px ${S.md+2}px`,fontSize:T.caption,fontFamily:font,fontWeight:500,color:refreshing?C.dim:C.muted,background:C.surfaceElevated,border:`1px solid ${C.border}`,borderRadius:8,cursor:refreshing?"not-allowed":"pointer",display:"flex",alignItems:"center",gap:S.xs+2,transition:"all 0.15s"}}>
           <span style={{display:"inline-block",animation:refreshing?"spin 1s linear infinite":"none"}}>↻</span>
           {refreshing?"Refreshing":"Refresh"}
         </button>
@@ -614,48 +614,102 @@ const Dashboard=({cfg,site,useMock,onSettings,rangeId,onRangeChange,compareMode,
   const rangeLabel=DATE_RANGES.find(r=>r.id===rangeId)?.label||"Last 24h";
   const compareLabel=getCompareLabel(rangeId,compareMode);
   const showDeltas=compareMode!=="none"&&rangeId!=="all";
-  return (<div style={{maxWidth:1280,margin:"0 auto",padding:"24px 28px"}}>
+  return (<div style={{maxWidth:1280,margin:"0 auto",padding:`${S.xl}px ${S.xxl-4}px`,position:"relative"}}>
+    {/* Subtle radial backdrop anchoring brand identity behind the header */}
+    <div style={{position:"absolute",top:-40,left:0,right:0,height:240,background:"radial-gradient(circle at 18% 30%, rgba(217,170,90,0.06), transparent 55%)",pointerEvents:"none",zIndex:0}}/>
     {/* Top header: site name + active visitors */}
-    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:24,paddingBottom:20,borderBottom:`1px solid ${C.border}`,flexWrap:"wrap",gap:16}}>
+    <div style={{position:"relative",zIndex:1,display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:S.xxxl,paddingBottom:S.xl,borderBottom:`1px solid ${C.border}`,flexWrap:"wrap",gap:S.lg}}>
       <div>
-        <h1 style={{fontFamily:font,fontSize:22,fontWeight:600,color:C.bright,letterSpacing:"-0.02em",margin:0}}>{site.name}</h1>
-        <div style={{fontSize:13,color:C.muted,marginTop:4,fontFamily:mono}}>{site.domain}</div>
+        <div style={{marginBottom:S.xs}}><Eyebrow color={C.accent}>Analytics</Eyebrow></div>
+        <h1 style={{fontFamily:font,fontSize:T.display,fontWeight:700,color:C.bright,letterSpacing:"-0.02em",margin:0,lineHeight:1.05}}>{site.name}</h1>
+        <div style={{fontSize:T.small,color:C.muted,marginTop:S.sm,fontFamily:mono}}>{site.domain}</div>
       </div>
-      <div style={{display:"flex",alignItems:"center",gap:8,background:C.greenSoft,border:`1px solid ${C.greenBdr}`,borderRadius:8,padding:"6px 14px",fontSize:13,color:C.green,fontWeight:500,fontFamily:mono}}>
-        <span style={{width:7,height:7,background:C.green,borderRadius:"50%",animation:"pulse 2s ease-in-out infinite"}}/>{data.active} active
+      <div style={{display:"flex",alignItems:"center",gap:S.sm,background:C.greenSoft,border:`1px solid ${C.greenBdr}`,borderRadius:10,padding:`${S.sm}px ${S.lg}px`,fontSize:T.small,color:C.green,fontWeight:600,fontFamily:mono}}>
+        <span style={{width:8,height:8,background:C.green,borderRadius:"50%",animation:data.active>0?"activePulse 2s ease-in-out infinite":"pulse 2s ease-in-out infinite"}}/>
+        <span className="tabnum">{data.active}</span><span style={{color:C.muted}}>active</span>
       </div>
     </div>
-    {/* AI Insights — has its own date range internally */}
-    <AIInsights analyticsData={data} contextFiles={contextFiles}/>
+
+    {/* AI Insights — its own internal headings; wrap in a SectionCard for parity */}
+    <SectionCard accent={SECTION_COLORS.analytics}>
+      <AIInsights analyticsData={data} contextFiles={contextFiles}/>
+    </SectionCard>
+
     {/* Site Health */}
-    {(data.pageSpeed||data.seoAudit||data.siteHealthError)&&<><Heading desc="Google Lighthouse via PageSpeed Insights. Current state, refreshed once per day.">Site Health</Heading>
+    {(data.pageSpeed||data.seoAudit||data.siteHealthError)&&<SectionCard accent={SECTION_COLORS.health}>
+      <Heading eyebrow="Site Health" accent={SECTION_COLORS.health} desc="Google Lighthouse via PageSpeed Insights. Current state, refreshed once per day.">Performance & SEO</Heading>
       {(data.pageSpeed||data.seoAudit)?<SiteHealth pagespeed={data.pageSpeed} seoscore={data.seoAudit}/>
-      :<div style={{background:C.redSoft,border:"1px solid rgba(248,113,113,0.2)",borderRadius:12,padding:"16px 20px",marginBottom:24,fontSize:13,color:C.red}}>
-        <div style={{fontWeight:600,marginBottom:4}}>Site Health unavailable</div>
-        <div style={{fontSize:12,color:C.text,lineHeight:1.5}}>{data.siteHealthError}</div>
-        <div style={{fontSize:11,color:C.dim,marginTop:8,fontFamily:mono}}>Common causes: PageSpeed Insights timing out (Lighthouse takes 20-30s; raised function timeout to 60s but the API itself may still time out), Google quota exhausted, or the domain unreachable.</div>
+      :<div style={{background:C.redSoft,border:`1px solid ${C.redBdr}`,borderRadius:12,padding:`${S.lg}px ${S.xl}px`,fontSize:T.body,color:C.red}}>
+        <div style={{fontWeight:600,marginBottom:S.xs}}>Site Health unavailable</div>
+        <div style={{fontSize:T.caption,color:C.text,lineHeight:1.5}}>{data.siteHealthError}</div>
+        <div style={{fontSize:T.caption-1,color:C.dim,marginTop:S.sm,fontFamily:mono}}>Common causes: PageSpeed timing out, Google quota exhausted, or the domain unreachable from Lighthouse.</div>
       </div>}
-    </>}
+    </SectionCard>}
+
     {/* Sticky range bar — controls everything below */}
     <StickyRangeBar rangeId={rangeId} onRangeChange={onRangeChange} compareMode={compareMode} onCompareChange={onCompareChange} onRefresh={handleRefresh} lastUpdated={lastUpdated} refreshing={refreshing||loading}/>
+
     {/* KPIs */}
-    <Heading desc={showDeltas?`${rangeLabel} vs ${compareLabel}.`:`${rangeLabel}.`}>At a Glance</Heading>
-    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(200px, 1fr))",gap:16,marginBottom:32}}>
-      <KPI label="Views" value={t.pageviews} prev={y.pageviews} showDelta={showDeltas} compareLabel={compareLabel}/>
-      <KPI label="Visitors" value={t.visitors} prev={y.visitors} showDelta={showDeltas} compareLabel={compareLabel}/>
-      <KPI label="Visits" value={t.visits} prev={y.visits} showDelta={showDeltas} compareLabel={compareLabel}/>
-      <KPI label="Bounce Rate" value={bT} prev={bY} suffix="%" invertDelta sub={`Avg. duration: ${durFmt(t.totaltime,t.visits)}`} showDelta={showDeltas} compareLabel={compareLabel}/>
-    </div>
+    <SectionCard accent={SECTION_COLORS.kpis}>
+      <Heading eyebrow="Overview" accent={SECTION_COLORS.kpis} desc={showDeltas?`${rangeLabel} vs ${compareLabel}.`:`${rangeLabel}.`}>At a Glance</Heading>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(200px, 1fr))",gap:S.lg}}>
+        <KPI label="Views" value={t.pageviews} prev={y.pageviews} showDelta={showDeltas} compareLabel={compareLabel}/>
+        <KPI label="Visitors" value={t.visitors} prev={y.visitors} showDelta={showDeltas} compareLabel={compareLabel}/>
+        <KPI label="Visits" value={t.visits} prev={y.visits} showDelta={showDeltas} compareLabel={compareLabel}/>
+        <KPI label="Bounce Rate" value={bT} prev={bY} suffix="%" invertDelta sub={`Avg. duration: ${durFmt(t.totaltime,t.visits)}`} showDelta={showDeltas} compareLabel={compareLabel}/>
+      </div>
+    </SectionCard>
+
     {/* Traffic chart */}
-    {data.timeSeries?.length>0&&<><Heading desc={`${data.unit==="hour"?"Hourly":"Daily"} traffic for ${rangeLabel.toLowerCase()}. Pageviews count every page load (one visitor reading three pages = 3 pageviews). Sessions count visits to your site (one visitor browsing for 20 minutes = 1 session, regardless of pages viewed).`}>Traffic</Heading><div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"20px 16px 12px",marginBottom:24}}><div style={{display:"flex",justifyContent:"flex-end",gap:16,fontSize:11,color:C.muted,fontFamily:mono,marginBottom:12,paddingRight:8}}><span><Dot color={C.accent}/>Pageviews</span><span><Dot color={C.blue}/>Sessions</span></div><ResponsiveContainer width="100%" height={220}><ComposedChart data={data.timeSeries}><defs><linearGradient id="pvG" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={C.accent} stopOpacity={0.15}/><stop offset="100%" stopColor={C.accent} stopOpacity={0}/></linearGradient></defs><CartesianGrid strokeDasharray="3 3" stroke="rgba(200,205,211,0.04)"/><XAxis dataKey="label" tick={{fill:C.dim,fontSize:10,fontFamily:mono}} axisLine={false} tickLine={false}/><YAxis tick={{fill:C.dim,fontSize:10,fontFamily:mono}} axisLine={false} tickLine={false} width={36}/><Tooltip content={<Tip/>}/><Area type="monotone" dataKey="pageviews" stroke={C.accent} strokeWidth={2} fill="url(#pvG)" name="Pageviews"/><Line type="monotone" dataKey="sessions" stroke={C.blue} strokeWidth={1.5} dot={false} name="Sessions"/></ComposedChart></ResponsiveContainer></div></>}
+    {data.timeSeries?.length>0&&<SectionCard accent={SECTION_COLORS.traffic}>
+      <Heading eyebrow="Traffic" accent={SECTION_COLORS.traffic} desc={`${data.unit==="hour"?"Hourly":"Daily"} traffic for ${rangeLabel.toLowerCase()}. Pageviews count every page load. Sessions count visits.`}>{data.unit==="hour"?"Hourly":"Daily"} traffic</Heading>
+      <div style={{background:C.surfaceInset,border:`1px solid ${C.border}`,borderRadius:12,padding:`${S.xl}px ${S.lg}px ${S.md}px`}}>
+        <div style={{display:"flex",justifyContent:"flex-end",gap:S.lg,fontSize:T.caption,color:C.muted,fontFamily:mono,marginBottom:S.md,paddingRight:S.sm}}>
+          <span><Dot color={C.accent}/>Pageviews</span><span><Dot color={C.blue}/>Sessions</span>
+        </div>
+        <ResponsiveContainer width="100%" height={240}>
+          <ComposedChart data={data.timeSeries}>
+            <defs><linearGradient id="pvG" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={C.accent} stopOpacity={0.2}/><stop offset="100%" stopColor={C.accent} stopOpacity={0}/></linearGradient></defs>
+            <CartesianGrid strokeDasharray="2 4" stroke={C.gridLine}/>
+            <XAxis dataKey="label" tick={{fill:C.dim,fontSize:T.eyebrow+1,fontFamily:mono}} axisLine={false} tickLine={false}/>
+            <YAxis tick={{fill:C.dim,fontSize:T.eyebrow+1,fontFamily:mono}} axisLine={false} tickLine={false} width={40}/>
+            <Tooltip content={<Tip/>}/>
+            <Area type="monotone" dataKey="pageviews" stroke={C.accent} strokeWidth={2} fill="url(#pvG)" name="Pageviews"/>
+            <Line type="monotone" dataKey="sessions" stroke={C.blue} strokeWidth={1.5} dot={false} name="Sessions"/>
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
+    </SectionCard>}
+
     {/* Geo */}
-    <Heading desc={`Visitor distribution by country for ${rangeLabel.toLowerCase()}.`}>Where Your Traffic Comes From</Heading><GeoChart data={data.countries}/>
+    <SectionCard accent={SECTION_COLORS.geo}>
+      <Heading eyebrow="Geography" accent={SECTION_COLORS.geo} desc={`Visitor distribution by country for ${rangeLabel.toLowerCase()}.`}>Where your traffic comes from</Heading>
+      <GeoChart data={data.countries}/>
+    </SectionCard>
+
     {/* Breakdowns */}
-    <Heading desc={`Top pages, referrers, and audience profile for ${rangeLabel.toLowerCase()}.`}>Breakdowns</Heading><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(320px, 1fr))",gap:16,marginBottom:32}}><BTable title="Top Pages" data={data.pages}/><BTable title="Referrers" data={data.referrers}/><BTable title="Browsers" data={data.browsers}/><BTable title="Devices" data={data.devices}/><BTable title="Operating Systems" data={data.os}/></div>
+    <SectionCard accent={SECTION_COLORS.audience}>
+      <Heading eyebrow="Audience" accent={SECTION_COLORS.audience} desc={`Top pages, referrers, and audience profile for ${rangeLabel.toLowerCase()}.`}>Breakdowns</Heading>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(320px, 1fr))",gap:S.lg}}>
+        <BTable title="Top Pages" data={data.pages}/>
+        <BTable title="Referrers" data={data.referrers}/>
+        <BTable title="Browsers" data={data.browsers}/>
+        <BTable title="Devices" data={data.devices}/>
+        <BTable title="Operating Systems" data={data.os}/>
+      </div>
+    </SectionCard>
+
     {/* Events */}
-    <Heading desc={`Custom events and traffic channels for ${rangeLabel.toLowerCase()}.`}>Events & Channels</Heading><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(320px, 1fr))",gap:16,marginBottom:32}}><BTable title="Top Events" data={data.events}/><BTable title="Channels" data={data.channels}/></div>
+    <SectionCard accent={SECTION_COLORS.events}>
+      <Heading eyebrow="Engagement" accent={SECTION_COLORS.events} desc={`Custom events and traffic channels for ${rangeLabel.toLowerCase()}.`}>Events & channels</Heading>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(320px, 1fr))",gap:S.lg}}>
+        <BTable title="Top Events" data={data.events}/>
+        <BTable title="Channels" data={data.channels}/>
+      </div>
+    </SectionCard>
+
     {/* Footer */}
-    <div style={{textAlign:"center",padding:"24px 0 16px",borderTop:`1px solid ${C.border}`,fontSize:12,color:"#374151",fontFamily:mono}}>Honoroll Dashboard v1.0</div>
+    <div style={{textAlign:"center",padding:`${S.xxl}px 0 ${S.lg}px`,borderTop:`1px solid ${C.border}`,fontSize:T.caption,color:C.faint,fontFamily:mono}}>Honoroll Dashboard v1.0</div>
   </div>);
 };
 
@@ -1672,85 +1726,99 @@ const ContentPage=({analyticsData,contentState,setContentState,contextFiles,defa
 
   const GenBtn=({onClick,loading,exists,color,children})=> (<button onClick={onClick} disabled={loading} style={{padding:"10px 24px",fontSize:14,fontWeight:600,fontFamily:font,cursor:"pointer",transition:"all 0.2s",borderRadius:10,border:"none",background:loading?"rgba(200,205,211,0.06)":exists?"rgba(200,205,211,0.06)":`linear-gradient(135deg,${color},${color}99)`,color:loading?C.muted:exists?C.muted:C.bg,opacity:loading?0.5:1}}>{loading?"Generating...":exists?"Regenerate":children}</button>);
 
-  return (<div style={{maxWidth:1280,margin:"0 auto",padding:"24px 20px"}}>
-    {/* Header */}
-    <Heading desc="Track content, schedule posts, preview before publishing.">Content Calendar</Heading>
-    <ContentCalendar history={calendar} onUpdateEntry={updateCalendarEntry} onDeleteEntry={deleteCalendarEntry} onUploadImage={uploadCalendarImage}/>
+  // Section header + actions row used at the top of each generator SectionCard
+  const SectionHeader=({eyebrow,accent,title,desc,actions})=>(<div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end",gap:S.lg,flexWrap:"wrap",marginBottom:S.lg}}>
+    <Heading eyebrow={eyebrow} accent={accent} desc={desc}>{title}</Heading>
+    {actions&&<div style={{display:"flex",gap:S.sm,alignItems:"center",flexWrap:"wrap"}}>{actions}</div>}
+  </div>);
+
+  return (<div style={{maxWidth:1280,margin:"0 auto",padding:`${S.xl}px ${S.lg+4}px`,position:"relative"}}>
+    {/* Top header */}
+    <div style={{marginBottom:S.xxxl,paddingBottom:S.xl,borderBottom:`1px solid ${C.border}`}}>
+      <Eyebrow color={SECTION_COLORS.content}>Content</Eyebrow>
+      <h1 style={{fontFamily:font,fontSize:T.display,fontWeight:700,color:C.bright,letterSpacing:"-0.02em",margin:`${S.xs}px 0 0`,lineHeight:1.05}}>Drafts & Calendar</h1>
+    </div>
+
+    {/* Calendar */}
+    <SectionCard accent={SECTION_COLORS.calendar}>
+      <Heading eyebrow="Calendar" accent={SECTION_COLORS.calendar} desc="Track content, schedule posts, preview before publishing.">Content calendar</Heading>
+      <ContentCalendar history={calendar} onUpdateEntry={updateCalendarEntry} onDeleteEntry={deleteCalendarEntry} onUploadImage={uploadCalendarImage}/>
+    </SectionCard>
 
     {/* Queue */}
-    <Heading desc="Upcoming scheduled content and recent drafts.">Content Queue</Heading>
-    <ContentQueue items={calendar} onUpdate={updateCalendarEntry} onDelete={deleteCalendarEntry}/>
+    <SectionCard accent={SECTION_COLORS.queue}>
+      <Heading eyebrow="Queue" accent={SECTION_COLORS.queue} desc="Upcoming scheduled content and recent drafts.">Content queue</Heading>
+      <ContentQueue items={calendar} onUpdate={updateCalendarEntry} onDelete={deleteCalendarEntry}/>
+    </SectionCard>
 
-    {/* Prompt / Topic */}
-    <Heading desc="The central topic or angle every generator below will use. Leave blank to generate freely from your active context files.">What to write about</Heading>
-    <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"18px 20px",marginBottom:24}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end",gap:12,marginBottom:8,flexWrap:"wrap"}}>
-        <label style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em"}}>Topic / prompt</label>
-        <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
-          <span style={{fontSize:10,color:C.dim,fontFamily:mono}}>Templates:</span>
-          {CONTENT_PROMPT_TEMPLATES.map(t=>(<button key={t.id} onClick={()=>updateTopic(t.seed)} title={t.seed} style={{padding:"4px 10px",fontSize:11,fontFamily:font,color:C.muted,background:"rgba(200,205,211,0.04)",border:`1px solid ${C.border}`,borderRadius:6,cursor:"pointer"}}>{t.label}</button>))}
-          {topic&&<button onClick={()=>updateTopic("")} title="Clear topic" style={{padding:"4px 10px",fontSize:11,fontFamily:mono,color:C.red,background:"none",border:`1px solid rgba(248,113,113,0.25)`,borderRadius:6,cursor:"pointer"}}>Clear</button>}
+    {/* Topic / Prompt */}
+    <SectionCard accent={SECTION_COLORS.topic}>
+      <Heading eyebrow="Topic" accent={SECTION_COLORS.topic} desc="The central topic or angle every generator below will use. Leave blank to generate freely from your active context files.">What to write about</Heading>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end",gap:S.md,marginBottom:S.sm,flexWrap:"wrap"}}>
+        <Eyebrow>Topic / prompt</Eyebrow>
+        <div style={{display:"flex",gap:S.xs+2,alignItems:"center",flexWrap:"wrap"}}>
+          <span style={{fontSize:T.eyebrow,color:C.dim,fontFamily:mono,marginRight:S.xs}}>Templates:</span>
+          {CONTENT_PROMPT_TEMPLATES.map(t=>(<button key={t.id} onClick={()=>updateTopic(t.seed)} title={t.seed} style={{padding:`${S.xs+1}px ${S.md-2}px`,fontSize:T.caption-1,fontFamily:font,color:C.muted,background:C.surfaceElevated,border:`1px solid ${C.border}`,borderRadius:6,cursor:"pointer"}}>{t.label}</button>))}
+          {topic&&<button onClick={()=>updateTopic("")} title="Clear topic" style={{padding:`${S.xs+1}px ${S.md-2}px`,fontSize:T.caption-1,fontFamily:mono,color:C.red,background:"none",border:`1px solid ${C.redBdr}`,borderRadius:6,cursor:"pointer"}}>Clear</button>}
         </div>
       </div>
-      <textarea value={topic} onChange={e=>updateTopic(e.target.value)} placeholder="e.g. We just shipped commit-reveal RNG verification on Sapphire testnet. Explain what changes for players and why provability beats operator trust." style={{width:"100%",background:"rgba(200,205,211,0.05)",border:`1px solid ${C.border}`,borderRadius:8,padding:"12px 14px",fontSize:13,fontFamily:font,color:C.bright,outline:"none",resize:"vertical",lineHeight:1.6,boxSizing:"border-box",minHeight:90}}/>
-      {/* Active context indicator */}
+      <textarea value={topic} onChange={e=>updateTopic(e.target.value)} placeholder="e.g. We just shipped commit-reveal RNG verification on Sapphire testnet. Explain what changes for players and why provability beats operator trust." style={{width:"100%",background:C.surfaceInset,border:`1px solid ${C.border}`,borderRadius:8,padding:`${S.md}px ${S.lg-2}px`,fontSize:T.body,fontFamily:font,color:C.bright,outline:"none",resize:"vertical",lineHeight:1.6,boxSizing:"border-box",minHeight:96}}/>
       {(() => {
         const active=(contextFiles||[]).filter(f=>f.active);
         const grouped=CONTEXT_CATEGORIES.map(cat=>({cat,count:active.filter(f=>f.category===cat.id).length})).filter(g=>g.count>0);
-        if(grouped.length===0)return (<div style={{marginTop:10,fontSize:11,color:C.dim,fontFamily:mono}}>⚠ No active context files. Open Settings → Context Files to enable some.</div>);
-        return (<div style={{marginTop:10,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-          <span style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em"}}>Using context</span>
-          {grouped.map(({cat,count})=>(<span key={cat.id} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"3px 8px",fontSize:10,fontFamily:mono,color:cat.color,background:`${cat.color}15`,border:`1px solid ${cat.color}30`,borderRadius:4}}>{cat.icon} {cat.label}{count>1?` ×${count}`:""}</span>))}
+        if(grouped.length===0)return (<div style={{marginTop:S.md,fontSize:T.caption-1,color:C.dim,fontFamily:mono}}>⚠ No active context files. Open Settings → Context Files to enable some.</div>);
+        return (<div style={{marginTop:S.md,display:"flex",alignItems:"center",gap:S.sm,flexWrap:"wrap"}}>
+          <Eyebrow>Using context</Eyebrow>
+          {grouped.map(({cat,count})=>(<span key={cat.id} style={{display:"inline-flex",alignItems:"center",gap:S.xs,padding:`${S.xs-1}px ${S.sm+2}px`,fontSize:T.eyebrow,fontFamily:mono,color:cat.color,background:`${cat.color}1A`,border:`1px solid ${cat.color}40`,borderRadius:4}}>{cat.icon} {cat.label}{count>1?` ×${count}`:""}</span>))}
         </div>);
       })()}
-      <div style={{marginTop:8,fontSize:10,color:C.dim,fontFamily:mono,textAlign:"right"}}>{topic.length} chars</div>
-    </div>
+      <div style={{marginTop:S.sm,fontSize:T.eyebrow,color:C.dim,fontFamily:mono,textAlign:"right"}} className="tabnum">{topic.length} chars</div>
+    </SectionCard>
 
     {/* Tone */}
-    <Heading desc="Sets the voice for all generators below.">Tone</Heading>
-    <ToneSelector value={tone} onChange={(t)=>{setTone(t);setContentState(s=>({...s,tone:t}));}}/>
+    <SectionCard accent={SECTION_COLORS.tone}>
+      <Heading eyebrow="Voice" accent={SECTION_COLORS.tone} desc="Sets the voice for all generators below.">Tone</Heading>
+      <ToneSelector value={tone} onChange={(t)=>{setTone(t);setContentState(s=>({...s,tone:t}));}}/>
+    </SectionCard>
 
-    {/* ─── X Posts ─── */}
-    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:12}}>
-      <Heading desc="Three tweet variants. Click text to edit, schedule to calendar.">𝕏 Post Drafts</Heading>
-      <div style={{display:"flex",gap:8,alignItems:"center"}}><LengthPicker value={postLength} onChange={setPostLength}/><GenBtn onClick={genPosts} loading={postsLoading} exists={!!posts} color={C.accent}>Generate Posts</GenBtn></div>
-    </div>
-    {!posts&&!postsLoading&&!postsError&&<div style={{background:C.surface,border:`1px dashed ${C.border}`,borderRadius:12,padding:"32px 24px",textAlign:"center",marginBottom:32}}><div style={{fontSize:24,marginBottom:8,opacity:0.4}}>𝕏</div><div style={{fontSize:13,color:C.muted}}>Generate 3 tweet variants</div></div>}
-    {postsLoading&&<div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"32px",textAlign:"center",marginBottom:32}}><div style={{display:"flex",justifyContent:"center",gap:6,marginBottom:12}}>{[0,1,2].map(i=> <div key={i} style={{width:8,height:8,borderRadius:"50%",background:C.accent,animation:`pulse 1.2s ease-in-out ${i*0.2}s infinite`}}/>)}</div><div style={{fontSize:13,color:C.text}}>Drafting tweets...</div></div>}
-    {postsError&&<div style={{background:C.redSoft,border:"1px solid rgba(248,113,113,0.15)",borderRadius:12,padding:"16px 20px",marginBottom:32,fontSize:13,color:C.red}}>{postsError}</div>}
-    {posts&&<div style={{display:"flex",flexDirection:"column",gap:12,marginBottom:40}}>{posts.map((p,i)=> (<div key={i} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"16px 20px",animation:`fadeIn 0.3s ease-out ${i*0.1}s both`}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,flexWrap:"wrap",gap:8}}>
-        <div style={{display:"flex",alignItems:"center",gap:8}}><DraftBadge/>{p.angle&&<span style={{fontSize:11,color:C.muted,fontFamily:mono}}>{p.angle}</span>}</div>
-        <div style={{display:"flex",alignItems:"center",gap:8}}><CharCount n={p.text?.length||0}/><ScheduleBtn onSchedule={(date)=>scheduleToDate("post",p.text,p.text,date)} scheduledDate={findScheduledDate("post",p.text)}/><CopyBtn text={p.text}/></div>
-      </div>
-      <EditableText value={p.text} onChange={(t)=>updatePost(i,t)} maxChars={280}/>
-    </div>))}</div>}
+    {/* X Posts */}
+    <SectionCard accent={SECTION_COLORS.drafts}>
+      <SectionHeader eyebrow="Posts" accent={SECTION_COLORS.drafts} title="𝕏 Post drafts" desc="Three tweet variants. Click text to edit, schedule to calendar." actions={<><LengthPicker value={postLength} onChange={setPostLength}/><GenBtn onClick={genPosts} loading={postsLoading} exists={!!posts} color={C.accent}>Generate Posts</GenBtn></>}/>
+      {!posts&&!postsLoading&&!postsError&&<div style={{background:C.surfaceInset,border:`1px dashed ${C.border}`,borderRadius:12,padding:`${S.xxl}px ${S.xl}px`,textAlign:"center"}}><div style={{fontSize:28,marginBottom:S.sm,opacity:0.4}}>𝕏</div><div style={{fontSize:T.body,color:C.muted}}>Generate 3 tweet variants</div></div>}
+      {postsLoading&&<div style={{background:C.surfaceInset,border:`1px solid ${C.border}`,borderRadius:12,padding:S.xxl,textAlign:"center"}}><div style={{display:"flex",justifyContent:"center",gap:S.sm-2,marginBottom:S.md}}>{[0,1,2].map(i=> <div key={i} style={{width:8,height:8,borderRadius:"50%",background:C.accent,animation:`pulse 1.2s ease-in-out ${i*0.2}s infinite`}}/>)}</div><div style={{fontSize:T.body,color:C.text}}>Drafting tweets...</div></div>}
+      {postsError&&<div style={{background:C.redSoft,border:`1px solid ${C.redBdr}`,borderRadius:12,padding:`${S.lg}px ${S.xl}px`,fontSize:T.body,color:C.red}}>{postsError}</div>}
+      {posts&&<div style={{display:"flex",flexDirection:"column",gap:S.md}}>{posts.map((p,i)=> (<div key={i} className="tile-hover" style={{background:C.surfaceElevated,border:`1px solid ${C.border}`,borderRadius:12,padding:`${S.lg}px ${S.xl}px`,animation:`fadeIn 0.3s ease-out ${i*0.1}s both`}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:S.md-2,flexWrap:"wrap",gap:S.sm}}>
+          <div style={{display:"flex",alignItems:"center",gap:S.sm}}><DraftBadge/>{p.angle&&<span style={{fontSize:T.caption-1,color:C.muted,fontFamily:mono}}>{p.angle}</span>}</div>
+          <div style={{display:"flex",alignItems:"center",gap:S.sm}}><CharCount n={p.text?.length||0}/><ScheduleBtn onSchedule={(date)=>scheduleToDate("post",p.text,p.text,date)} scheduledDate={findScheduledDate("post",p.text)}/><CopyBtn text={p.text}/></div>
+        </div>
+        <EditableText value={p.text} onChange={(t)=>updatePost(i,t)} maxChars={280}/>
+      </div>))}</div>}
+    </SectionCard>
 
-    {/* ─── X Article ─── */}
-    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:12}}>
-      <Heading desc="Long-form article (400-800 words) for X.">𝕏 Article Draft</Heading>
-      <div style={{display:"flex",gap:8,alignItems:"center"}}><LengthPicker value={articleLength} onChange={setArticleLength}/><GenBtn onClick={genArticle} loading={articleLoading} exists={!!article} color={C.purple}>Generate Article</GenBtn></div>
-    </div>
-    {!article&&!articleLoading&&!articleError&&<div style={{background:C.surface,border:`1px dashed ${C.border}`,borderRadius:12,padding:"32px 24px",textAlign:"center",marginBottom:32}}><div style={{fontSize:24,marginBottom:8,opacity:0.4}}>📝</div><div style={{fontSize:13,color:C.muted}}>Generate a long-form article</div></div>}
-    {articleLoading&&<div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"32px",textAlign:"center",marginBottom:32}}><div style={{display:"flex",justifyContent:"center",gap:6,marginBottom:12}}>{[0,1,2].map(i=> <div key={i} style={{width:8,height:8,borderRadius:"50%",background:C.purple,animation:`pulse 1.2s ease-in-out ${i*0.2}s infinite`}}/>)}</div><div style={{fontSize:13,color:C.text}}>Writing article...</div><div style={{fontSize:11,color:C.dim,marginTop:4}}>10-15 seconds</div></div>}
-    {articleError&&<div style={{background:C.redSoft,border:"1px solid rgba(248,113,113,0.15)",borderRadius:12,padding:"16px 20px",marginBottom:32,fontSize:13,color:C.red}}>{articleError}</div>}
-    {article&&<ArticleCard article={article} onUpdateBody={updateArticleBody} onUpdateHeadline={updateArticleHeadline} onSchedule={(date)=>scheduleToDate("article",article.headline,`${article.headline}\n\n${article.body}`,date)} scheduledDate={findScheduledDate("article",`${article.headline}\n\n${article.body}`)}/>}
+    {/* X Article */}
+    <SectionCard accent={SECTION_COLORS.article}>
+      <SectionHeader eyebrow="Article" accent={SECTION_COLORS.article} title="𝕏 Article draft" desc="Long-form article (400-800 words) for X." actions={<><LengthPicker value={articleLength} onChange={setArticleLength}/><GenBtn onClick={genArticle} loading={articleLoading} exists={!!article} color={C.purple}>Generate Article</GenBtn></>}/>
+      {!article&&!articleLoading&&!articleError&&<div style={{background:C.surfaceInset,border:`1px dashed ${C.border}`,borderRadius:12,padding:`${S.xxl}px ${S.xl}px`,textAlign:"center"}}><div style={{fontSize:28,marginBottom:S.sm,opacity:0.4}}>📝</div><div style={{fontSize:T.body,color:C.muted}}>Generate a long-form article</div></div>}
+      {articleLoading&&<div style={{background:C.surfaceInset,border:`1px solid ${C.border}`,borderRadius:12,padding:S.xxl,textAlign:"center"}}><div style={{display:"flex",justifyContent:"center",gap:S.sm-2,marginBottom:S.md}}>{[0,1,2].map(i=> <div key={i} style={{width:8,height:8,borderRadius:"50%",background:C.purple,animation:`pulse 1.2s ease-in-out ${i*0.2}s infinite`}}/>)}</div><div style={{fontSize:T.body,color:C.text}}>Writing article...</div><div style={{fontSize:T.caption-1,color:C.dim,marginTop:S.xs}}>10-15 seconds</div></div>}
+      {articleError&&<div style={{background:C.redSoft,border:`1px solid ${C.redBdr}`,borderRadius:12,padding:`${S.lg}px ${S.xl}px`,fontSize:T.body,color:C.red}}>{articleError}</div>}
+      {article&&<ArticleCard article={article} onUpdateBody={updateArticleBody} onUpdateHeadline={updateArticleHeadline} onSchedule={(date)=>scheduleToDate("article",article.headline,`${article.headline}\n\n${article.body}`,date)} scheduledDate={findScheduledDate("article",`${article.headline}\n\n${article.body}`)}/>}
+    </SectionCard>
 
-    {/* ─── X Thread ─── */}
-    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:12}}>
-      <Heading desc="4-6 tweet thread. Click tweets to edit, schedule the whole thread.">𝕏 Thread Draft</Heading>
-      <div style={{display:"flex",gap:8,alignItems:"center"}}>{thread&&<ScheduleBtn onSchedule={(date)=>scheduleToDate("thread",thread[0]?.tweet||"",thread.map((t,i)=>`${i+1}. ${t.tweet}`).join("\n\n"),date)} scheduledDate={thread?findScheduledDate("thread",thread.map((t,i)=>`${i+1}. ${t.tweet}`).join("\n\n")):null}/>}<LengthPicker value={threadLength} onChange={setThreadLength}/><GenBtn onClick={genThread} loading={threadLoading} exists={!!thread} color={C.blue}>Generate Thread</GenBtn></div>
-    </div>
-    {!thread&&!threadLoading&&!threadError&&<div style={{background:C.surface,border:`1px dashed ${C.border}`,borderRadius:12,padding:"32px 24px",textAlign:"center",marginBottom:32}}><div style={{fontSize:24,marginBottom:8,opacity:0.4}}>🧵</div><div style={{fontSize:13,color:C.muted}}>Generate a multi-tweet thread</div></div>}
-    {threadLoading&&<div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"32px",textAlign:"center",marginBottom:32}}><div style={{display:"flex",justifyContent:"center",gap:6,marginBottom:12}}>{[0,1,2].map(i=> <div key={i} style={{width:8,height:8,borderRadius:"50%",background:C.blue,animation:`pulse 1.2s ease-in-out ${i*0.2}s infinite`}}/>)}</div><div style={{fontSize:13,color:C.text}}>Crafting thread...</div></div>}
-    {threadError&&<div style={{background:C.redSoft,border:"1px solid rgba(248,113,113,0.15)",borderRadius:12,padding:"16px 20px",marginBottom:32,fontSize:13,color:C.red}}>{threadError}</div>}
-    {thread&&<div style={{marginBottom:40}}>
-      <div style={{display:"flex",justifyContent:"flex-end",gap:8,marginBottom:12,flexWrap:"wrap"}}><CopyBtn text={formatThread(thread)} label="Copy numbered"/><CopyBtn text={formatThreadTypefully(thread)} label="Copy for Typefully"/></div>
-      {thread.map((t,i)=> (<div key={i} style={{display:"flex",gap:12,marginBottom:0}}><div style={{display:"flex",flexDirection:"column",alignItems:"center",width:24,flexShrink:0}}><div style={{width:24,height:24,borderRadius:"50%",background:C.blue,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,fontFamily:mono,color:C.bg,flexShrink:0}}>{i+1}</div>{i<thread.length-1&&<div style={{width:2,flex:1,background:"rgba(90,184,217,0.15)",marginTop:4,marginBottom:4}}/>}</div><div style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"14px 18px",marginBottom:12,animation:`fadeIn 0.3s ease-out ${i*0.1}s both`}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8,flexWrap:"wrap",gap:8}}><DraftBadge/><div style={{display:"flex",alignItems:"center",gap:8}}><CharCount n={t.tweet?.length||0}/><CopyBtn text={t.tweet}/></div></div><EditableText value={t.tweet} onChange={(txt)=>updateThreadTweet(i,txt)} maxChars={280}/></div></div>))}
-    </div>}
+    {/* X Thread */}
+    <SectionCard accent={SECTION_COLORS.thread}>
+      <SectionHeader eyebrow="Thread" accent={SECTION_COLORS.thread} title="𝕏 Thread draft" desc="4-6 tweet thread. Click tweets to edit, schedule the whole thread." actions={<>{thread&&<ScheduleBtn onSchedule={(date)=>scheduleToDate("thread",thread[0]?.tweet||"",thread.map((t,i)=>`${i+1}. ${t.tweet}`).join("\n\n"),date)} scheduledDate={thread?findScheduledDate("thread",thread.map((t,i)=>`${i+1}. ${t.tweet}`).join("\n\n")):null}/>}<LengthPicker value={threadLength} onChange={setThreadLength}/><GenBtn onClick={genThread} loading={threadLoading} exists={!!thread} color={C.blue}>Generate Thread</GenBtn></>}/>
+      {!thread&&!threadLoading&&!threadError&&<div style={{background:C.surfaceInset,border:`1px dashed ${C.border}`,borderRadius:12,padding:`${S.xxl}px ${S.xl}px`,textAlign:"center"}}><div style={{fontSize:28,marginBottom:S.sm,opacity:0.4}}>🧵</div><div style={{fontSize:T.body,color:C.muted}}>Generate a multi-tweet thread</div></div>}
+      {threadLoading&&<div style={{background:C.surfaceInset,border:`1px solid ${C.border}`,borderRadius:12,padding:S.xxl,textAlign:"center"}}><div style={{display:"flex",justifyContent:"center",gap:S.sm-2,marginBottom:S.md}}>{[0,1,2].map(i=> <div key={i} style={{width:8,height:8,borderRadius:"50%",background:C.blue,animation:`pulse 1.2s ease-in-out ${i*0.2}s infinite`}}/>)}</div><div style={{fontSize:T.body,color:C.text}}>Crafting thread...</div></div>}
+      {threadError&&<div style={{background:C.redSoft,border:`1px solid ${C.redBdr}`,borderRadius:12,padding:`${S.lg}px ${S.xl}px`,fontSize:T.body,color:C.red}}>{threadError}</div>}
+      {thread&&<div>
+        <div style={{display:"flex",justifyContent:"flex-end",gap:S.sm,marginBottom:S.md,flexWrap:"wrap"}}><CopyBtn text={formatThread(thread)} label="Copy numbered"/><CopyBtn text={formatThreadTypefully(thread)} label="Copy for Typefully"/></div>
+        {thread.map((t,i)=> (<div key={i} style={{display:"flex",gap:S.md,marginBottom:0}}><div style={{display:"flex",flexDirection:"column",alignItems:"center",width:28,flexShrink:0}}><div style={{width:28,height:28,borderRadius:"50%",background:C.blue,display:"flex",alignItems:"center",justifyContent:"center",fontSize:T.caption,fontWeight:700,fontFamily:mono,color:C.bg,flexShrink:0}}>{i+1}</div>{i<thread.length-1&&<div style={{width:2,flex:1,background:C.blueBdr,marginTop:S.xs,marginBottom:S.xs}}/>}</div><div className="tile-hover" style={{flex:1,background:C.surfaceElevated,border:`1px solid ${C.border}`,borderRadius:12,padding:`${S.md+2}px ${S.lg+2}px`,marginBottom:S.md,animation:`fadeIn 0.3s ease-out ${i*0.1}s both`}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:S.sm,flexWrap:"wrap",gap:S.sm}}><DraftBadge/><div style={{display:"flex",alignItems:"center",gap:S.sm}}><CharCount n={t.tweet?.length||0}/><CopyBtn text={t.tweet}/></div></div><EditableText value={t.tweet} onChange={(txt)=>updateThreadTweet(i,txt)} maxChars={280}/></div></div>))}
+      </div>}
+    </SectionCard>
 
     {/* Footer */}
-    <div style={{textAlign:"center",padding:"24px 0 16px",borderTop:`1px solid ${C.border}`,fontSize:12,color:"#374151",fontFamily:mono}}>Honoroll Dashboard v1.0</div>
+    <div style={{textAlign:"center",padding:`${S.xxl}px 0 ${S.lg}px`,borderTop:`1px solid ${C.border}`,fontSize:T.caption,color:C.faint,fontFamily:mono}}>Honoroll Dashboard v1.0</div>
   </div>);
 };
 
@@ -1876,19 +1944,25 @@ const UtmPage=({utmLinks})=>{
 
   const uniqueSources=[...new Set(utmHistory.map(h=>h.source))];
 
-  return (<div style={{maxWidth:1280,margin:"0 auto",padding:"24px 20px"}}>
-    {/* Templates */}
-    <Heading desc="Click a template to pre-fill source and medium, then add your campaign name.">Quick Templates</Heading>
-    <div style={{display:"flex",gap:8,marginBottom:24,flexWrap:"wrap"}}>
-      {UTM_TEMPLATES.map(tpl=>(<button key={tpl.id} onClick={()=>applyTemplate(tpl)} style={{padding:"10px 20px",fontSize:13,fontFamily:font,fontWeight:500,color:C.text,background:"rgba(200,205,211,0.04)",border:`1px solid ${C.border}`,borderRadius:10,cursor:"pointer",transition:"all 0.15s",display:"flex",alignItems:"center",gap:8}} onMouseEnter={e=>{e.currentTarget.style.borderColor=C.accent;e.currentTarget.style.background="rgba(217,170,90,0.04)";}} onMouseLeave={e=>{e.currentTarget.style.borderColor=C.border;e.currentTarget.style.background="rgba(200,205,211,0.04)";}}>
-        <span style={{fontSize:16}}>{tpl.emoji}</span><span>{tpl.label}</span>
-      </button>))}
+  return (<div style={{maxWidth:1280,margin:"0 auto",padding:`${S.xl}px ${S.lg+4}px`}}>
+    {/* Top header */}
+    <div style={{marginBottom:S.xxxl,paddingBottom:S.xl,borderBottom:`1px solid ${C.border}`}}>
+      <Eyebrow color={SECTION_COLORS.utm}>Tracking</Eyebrow>
+      <h1 style={{fontFamily:font,fontSize:T.display,fontWeight:700,color:C.bright,letterSpacing:"-0.02em",margin:`${S.xs}px 0 0`,lineHeight:1.05}}>UTM links</h1>
     </div>
 
-    {/* Builder Form */}
-    <Heading desc="Three required fields: source (where), medium (type), campaign (what for). All values are auto-formatted to lowercase with underscores for consistency.">Build a Link</Heading>
-    <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"24px 26px",marginBottom:32}}>
-      <div style={{display:"grid",gap:16}}>
+    {/* Builder Form (with quick templates inline at top) */}
+    <SectionCard accent={SECTION_COLORS.builder}>
+      <Heading eyebrow="Builder" accent={SECTION_COLORS.builder} desc="Three required fields: source (where), medium (type), campaign (what for). Auto-formatted to lowercase with underscores.">Build a link</Heading>
+      <div style={{marginBottom:S.xl}}>
+        <Eyebrow>Quick templates</Eyebrow>
+        <div style={{display:"flex",gap:S.sm,marginTop:S.sm,flexWrap:"wrap"}}>
+          {UTM_TEMPLATES.map(tpl=>(<button key={tpl.id} onClick={()=>applyTemplate(tpl)} style={{padding:`${S.sm}px ${S.lg}px`,fontSize:T.small,fontFamily:font,fontWeight:500,color:C.text,background:C.surfaceElevated,border:`1px solid ${C.border}`,borderRadius:10,cursor:"pointer",transition:"all 0.15s",display:"flex",alignItems:"center",gap:S.sm}} onMouseEnter={e=>{e.currentTarget.style.borderColor=C.accent;e.currentTarget.style.background=C.accentSoft;}} onMouseLeave={e=>{e.currentTarget.style.borderColor=C.border;e.currentTarget.style.background=C.surfaceElevated;}}>
+            <span style={{fontSize:16}}>{tpl.emoji}</span><span>{tpl.label}</span>
+          </button>))}
+        </div>
+      </div>
+      <div style={{display:"grid",gap:S.lg}}>
         {/* Destination URL */}
         <div>
           <label style={{display:"block",fontSize:11,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Destination URL <span style={{color:C.red}}>*</span></label>
@@ -1926,41 +2000,43 @@ const UtmPage=({utmLinks})=>{
         </div>
 
         {/* Generate button */}
-        <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
-          <button onClick={save} disabled={!isComplete||saving} style={{padding:"12px 28px",fontSize:14,fontWeight:600,fontFamily:font,color:isComplete&&!saving?C.bg:C.muted,background:justSaved?C.green:isComplete&&!saving?`linear-gradient(135deg,${C.accent},#E8C06A)`:"rgba(200,205,211,0.06)",border:"none",borderRadius:10,cursor:isComplete&&!saving?"pointer":"not-allowed",transition:"all 0.2s",opacity:isComplete&&!saving?1:0.5}}>
+        <div style={{display:"flex",justifyContent:"flex-end",gap:S.sm}}>
+          <button onClick={save} disabled={!isComplete||saving} style={{padding:`${S.md}px ${S.xxl+4}px`,fontSize:T.body,fontWeight:600,fontFamily:font,color:isComplete&&!saving?C.bg:C.muted,background:justSaved?C.green:isComplete&&!saving?`linear-gradient(135deg,${C.accent},${C.accentBright})`:C.surfaceElevated,border:"none",borderRadius:10,cursor:isComplete&&!saving?"pointer":"not-allowed",transition:"all 0.2s",opacity:isComplete&&!saving?1:0.5,boxShadow:isComplete&&!saving?"0 6px 16px rgba(217,170,90,0.2)":"none"}}>
             {justSaved?"✓ Saved & Copied":saving?"Saving...":"Generate & Save"}
           </button>
         </div>
       </div>
-    </div>
+    </SectionCard>
 
     {/* History */}
-    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:12}}>
-      <Heading desc={`${utmHistory.length} link${utmHistory.length===1?"":"s"} created. Click View to see the full URL, Copy to clipboard, or Open to test it.`}>Link History</Heading>
-      {utmHistory.length>0&&<div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search links..."
-          style={{background:"rgba(200,205,211,0.05)",border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 12px",fontSize:12,fontFamily:font,color:C.bright,outline:"none",width:180}}/>
-        <select value={filterSource} onChange={e=>setFilterSource(e.target.value)}
-          style={{background:"rgba(200,205,211,0.05)",border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 12px",fontSize:12,fontFamily:font,color:filterSource?C.bright:C.muted,outline:"none",cursor:"pointer"}}>
-          <option value="">All sources</option>
-          {uniqueSources.map(s=> <option key={s} value={s}>{s}</option>)}
-        </select>
-      </div>}
-    </div>
-    {opError&&<div style={{padding:"10px 14px",marginBottom:16,fontSize:12,color:C.red,background:C.redSoft,border:"1px solid rgba(248,113,113,0.2)",borderRadius:8,display:"flex",justifyContent:"space-between",alignItems:"center"}}><span>{opError}</span><button onClick={()=>setOpError("")} style={{background:"none",border:"none",color:C.red,cursor:"pointer",fontSize:14}}>✕</button></div>}
-    {error&&<div style={{padding:"12px 14px",marginBottom:16,fontSize:12,color:C.red,background:C.redSoft,border:"1px solid rgba(248,113,113,0.2)",borderRadius:8}}>Load error: {error}</div>}
-    {loading?(<div style={{padding:"40px 24px",textAlign:"center",fontSize:13,color:C.muted,fontFamily:mono}}>Loading UTM links...</div>):
-    utmHistory.length===0?(<div style={{background:C.surface,border:`1px dashed ${C.border}`,borderRadius:12,padding:"40px 24px",textAlign:"center"}}>
-      <div style={{fontSize:32,marginBottom:12,opacity:0.4}}>🔗</div>
-      <div style={{fontSize:14,color:C.muted,marginBottom:6}}>No links yet</div>
-      <div style={{fontSize:12,color:C.dim}}>Build your first UTM link above</div>
-    </div>)
-    :filtered.length===0?(<div style={{background:C.surface,border:`1px dashed ${C.border}`,borderRadius:12,padding:"24px",textAlign:"center",fontSize:13,color:C.muted}}>No links match your filters</div>)
-    :(<div>{filtered.map(item=> <UtmHistoryItem key={item.id} item={item} onDelete={deleteEntry}/>)}</div>)
-    }
+    <SectionCard accent={SECTION_COLORS.history}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end",gap:S.md,marginBottom:S.lg,flexWrap:"wrap"}}>
+        <Heading eyebrow="History" accent={SECTION_COLORS.history} desc={`${utmHistory.length} link${utmHistory.length===1?"":"s"} created. Click View to see the full URL, Copy to clipboard, or Open to test it.`}>Link history</Heading>
+        {utmHistory.length>0&&<div style={{display:"flex",gap:S.sm,flexWrap:"wrap"}}>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search links..."
+            style={{background:C.surfaceInset,border:`1px solid ${C.border}`,borderRadius:8,padding:`${S.sm}px ${S.md}px`,fontSize:T.caption,fontFamily:font,color:C.bright,outline:"none",width:180}}/>
+          <select value={filterSource} onChange={e=>setFilterSource(e.target.value)}
+            style={{background:C.surfaceInset,border:`1px solid ${C.border}`,borderRadius:8,padding:`${S.sm}px ${S.md}px`,fontSize:T.caption,fontFamily:font,color:filterSource?C.bright:C.muted,outline:"none",cursor:"pointer"}}>
+            <option value="">All sources</option>
+            {uniqueSources.map(s=> <option key={s} value={s}>{s}</option>)}
+          </select>
+        </div>}
+      </div>
+      {opError&&<div style={{padding:`${S.md-2}px ${S.lg-2}px`,marginBottom:S.lg,fontSize:T.caption,color:C.red,background:C.redSoft,border:`1px solid ${C.redBdr}`,borderRadius:8,display:"flex",justifyContent:"space-between",alignItems:"center"}}><span>{opError}</span><button onClick={()=>setOpError("")} style={{background:"none",border:"none",color:C.red,cursor:"pointer",fontSize:T.body}}>✕</button></div>}
+      {error&&<div style={{padding:`${S.md}px ${S.lg-2}px`,marginBottom:S.lg,fontSize:T.caption,color:C.red,background:C.redSoft,border:`1px solid ${C.redBdr}`,borderRadius:8}}>Load error: {error}</div>}
+      {loading?(<div style={{padding:`${S.xxl+8}px ${S.xl}px`,textAlign:"center",fontSize:T.body,color:C.muted,fontFamily:mono}}>Loading UTM links...</div>):
+      utmHistory.length===0?(<div style={{background:C.surfaceInset,border:`1px dashed ${C.border}`,borderRadius:12,padding:`${S.xxl+8}px ${S.xl}px`,textAlign:"center"}}>
+        <div style={{fontSize:32,marginBottom:S.md,opacity:0.4}}>🔗</div>
+        <div style={{fontSize:T.body+1,color:C.muted,marginBottom:S.xs+2}}>No links yet</div>
+        <div style={{fontSize:T.caption,color:C.dim}}>Build your first UTM link above</div>
+      </div>)
+      :filtered.length===0?(<div style={{background:C.surfaceInset,border:`1px dashed ${C.border}`,borderRadius:12,padding:S.xl,textAlign:"center",fontSize:T.body,color:C.muted}}>No links match your filters</div>)
+      :(<div>{filtered.map(item=> <UtmHistoryItem key={item.id} item={item} onDelete={deleteEntry}/>)}</div>)
+      }
+    </SectionCard>
 
     {/* Footer */}
-    <div style={{textAlign:"center",padding:"24px 0 16px",borderTop:`1px solid ${C.border}`,fontSize:12,color:"#374151",fontFamily:mono,marginTop:32}}>Honoroll Dashboard v1.0</div>
+    <div style={{textAlign:"center",padding:`${S.xxl}px 0 ${S.lg}px`,borderTop:`1px solid ${C.border}`,fontSize:T.caption,color:C.faint,fontFamily:mono,marginTop:S.xxl}}>Honoroll Dashboard v1.0</div>
   </div>);
 };
 
@@ -1969,33 +2045,35 @@ const Header=({active,onChange,onSettings,settingsActive,user,onSignOut})=>{
   const TABS=[{id:"analytics",label:"Analytics"},{id:"content",label:"Content"},{id:"utm",label:"UTM Links"}];
   const[menuOpen,setMenuOpen]=useState(false);
   const initial=(user?.email||"?").charAt(0).toUpperCase();
-  return (<div style={{background:"rgba(10,12,15,0.6)",backdropFilter:"blur(8px)",borderBottom:`1px solid ${C.border}`,position:"sticky",top:0,zIndex:40}}>
-    <div style={{maxWidth:1280,margin:"0 auto",padding:"14px 20px",display:"flex",alignItems:"center",gap:24,flexWrap:"wrap"}}>
+  return (<div style={{background:"rgba(10,13,17,0.72)",backdropFilter:"blur(14px) saturate(140%)",WebkitBackdropFilter:"blur(14px) saturate(140%)",borderBottom:`1px solid ${C.border}`,position:"sticky",top:0,zIndex:40}}>
+    <div style={{maxWidth:1280,margin:"0 auto",padding:`${S.md+2}px ${S.lg+4}px`,display:"flex",alignItems:"center",gap:S.xxl,flexWrap:"wrap"}}>
       {/* Logo */}
-      <div style={{display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
-        <div style={{width:28,height:28,borderRadius:8,background:`linear-gradient(135deg,${C.accent},#E8C06A)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:700,color:C.bg}}>H</div>
-        <div style={{fontSize:16,fontWeight:700,color:C.bright,letterSpacing:"-0.01em"}}>Honoroll</div>
+      <div style={{display:"flex",alignItems:"center",gap:S.md-2,flexShrink:0}}>
+        <div style={{width:32,height:32,borderRadius:10,background:`linear-gradient(135deg,${C.accent},${C.accentBright})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,fontWeight:800,color:C.bg,boxShadow:"0 4px 12px rgba(217,170,90,0.25)"}}>H</div>
+        <div style={{fontSize:T.body+3,fontWeight:700,color:C.bright,letterSpacing:"-0.015em"}}>Honoroll</div>
       </div>
-      {/* Tabs */}
-      <div style={{display:"flex",gap:6,flex:1,flexWrap:"wrap"}}>
-        {TABS.map(tab=> (<button key={tab.id} onClick={()=>onChange(tab.id)} style={{padding:"9px 22px",fontSize:13,fontWeight:600,fontFamily:font,color:active===tab.id&&!settingsActive?C.bg:C.muted,cursor:"pointer",transition:"all 0.2s",background:active===tab.id&&!settingsActive?`linear-gradient(135deg,${C.accent},#E8C06A)`:"rgba(200,205,211,0.04)",border:active===tab.id&&!settingsActive?"none":`1px solid ${C.border}`,borderRadius:8,letterSpacing:"0.02em"}}>{tab.label}</button>))}
+      {/* Tabs as Linear-style segmented control */}
+      <div style={{display:"flex",gap:S.xs,flex:1,flexWrap:"wrap",background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,padding:S.xs}}>
+        {TABS.map(tab=>{const isActive=active===tab.id&&!settingsActive;
+          return (<button key={tab.id} onClick={()=>onChange(tab.id)} style={{padding:`${S.sm-1}px ${S.lg+2}px`,fontSize:T.small,fontWeight:isActive?600:500,fontFamily:font,color:isActive?C.bright:C.muted,cursor:"pointer",transition:"all 0.18s",background:isActive?C.surfaceElevated:"transparent",border:isActive?`1px solid ${C.borderStrong}`:"1px solid transparent",borderRadius:7,letterSpacing:"0.01em"}}>{tab.label}</button>);
+        })}
       </div>
       {/* User menu */}
       <div style={{position:"relative",flexShrink:0}}>
-        <button onClick={()=>setMenuOpen(!menuOpen)} title={user?.email||""} style={{width:36,height:36,borderRadius:"50%",background:menuOpen?C.accentSoft:"rgba(200,205,211,0.06)",border:`1px solid ${menuOpen?C.accent:C.border}`,color:menuOpen?C.accent:C.muted,cursor:"pointer",fontSize:13,fontWeight:600,fontFamily:mono,display:"flex",alignItems:"center",justifyContent:"center",transition:"all 0.15s"}}>{initial}</button>
+        <button onClick={()=>setMenuOpen(!menuOpen)} title={user?.email||""} style={{width:38,height:38,borderRadius:"50%",background:menuOpen?C.accentSoft:C.surfaceElevated,border:`1px solid ${menuOpen?C.accent:C.border}`,color:menuOpen?C.accent:C.muted,cursor:"pointer",fontSize:T.body,fontWeight:700,fontFamily:mono,display:"flex",alignItems:"center",justifyContent:"center",transition:"all 0.15s"}}>{initial}</button>
         {menuOpen&&(<>
           <div onClick={()=>setMenuOpen(false)} style={{position:"fixed",inset:0,zIndex:39}}/>
-          <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,zIndex:40,background:"#1A1F25",border:`1px solid ${C.border}`,borderRadius:10,padding:4,minWidth:240,boxShadow:"0 8px 24px rgba(0,0,0,0.4)",animation:"fadeIn 0.15s ease-out"}}>
-            <div style={{padding:"10px 12px",borderBottom:`1px solid ${C.border}`,marginBottom:4}}>
-              <div style={{fontSize:10,color:C.dim,textTransform:"uppercase",fontFamily:mono,letterSpacing:"0.06em",marginBottom:3}}>Signed in as</div>
-              <div style={{fontSize:13,color:C.bright,fontFamily:mono,wordBreak:"break-all"}}>{user?.email||""}</div>
+          <div style={{position:"absolute",top:"calc(100% + 8px)",right:0,zIndex:40,background:"#161A20",border:`1px solid ${C.borderStrong}`,borderRadius:12,padding:S.xs+2,minWidth:260,boxShadow:"0 12px 32px rgba(0,0,0,0.5)",animation:"fadeIn 0.15s ease-out"}}>
+            <div style={{padding:`${S.md-2}px ${S.md+2}px`,borderBottom:`1px solid ${C.border}`,marginBottom:S.xs+2}}>
+              <Eyebrow>Signed in as</Eyebrow>
+              <div style={{fontSize:T.small,color:C.bright,fontFamily:mono,wordBreak:"break-all",marginTop:S.xs}}>{user?.email||""}</div>
             </div>
-            <button onClick={()=>{setMenuOpen(false);onSignOut();}} style={{display:"block",width:"100%",textAlign:"left",padding:"10px 12px",fontSize:13,fontFamily:font,color:C.red,background:"transparent",border:"none",borderRadius:6,cursor:"pointer"}}>Sign out</button>
+            <button onClick={()=>{setMenuOpen(false);onSignOut();}} style={{display:"block",width:"100%",textAlign:"left",padding:`${S.md-2}px ${S.md+2}px`,fontSize:T.small,fontFamily:font,fontWeight:500,color:C.red,background:"transparent",border:"none",borderRadius:6,cursor:"pointer"}}>Sign out</button>
           </div>
         </>)}
       </div>
       {/* Settings */}
-      <button onClick={onSettings} title="Settings" style={{width:36,height:36,borderRadius:8,background:settingsActive?C.accentSoft:"rgba(200,205,211,0.04)",border:`1px solid ${settingsActive?C.accent:C.border}`,color:settingsActive?C.accent:C.muted,cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center",transition:"all 0.15s",flexShrink:0}}>⚙</button>
+      <button onClick={onSettings} title="Settings" style={{width:38,height:38,borderRadius:10,background:settingsActive?C.accentSoft:C.surfaceElevated,border:`1px solid ${settingsActive?C.accent:C.border}`,color:settingsActive?C.accent:C.muted,cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center",transition:"all 0.15s",flexShrink:0}}>⚙</button>
     </div>
   </div>);
 };
@@ -2014,115 +2092,115 @@ const SettingsPage=({ctxFiles,brandAssets,defaults,onUpdateDefaults})=>{
   const[showContext,setShowContext]=useState(true);
   const[showAssets,setShowAssets]=useState(true);
 
-  return (<div style={{maxWidth:1280,margin:"0 auto",padding:"24px 20px"}}>
-    <div style={{marginBottom:24}}>
-      <h1 style={{fontFamily:font,fontSize:24,fontWeight:700,color:C.bright,letterSpacing:"-0.02em",margin:0}}>Settings</h1>
-      <div style={{fontSize:13,color:C.muted,marginTop:4}}>Manage context, brand, integrations, and defaults.</div>
+  return (<div style={{maxWidth:1280,margin:"0 auto",padding:`${S.xl}px ${S.lg+4}px`}}>
+    <div style={{marginBottom:S.xxxl,paddingBottom:S.xl,borderBottom:`1px solid ${C.border}`}}>
+      <Eyebrow color={C.muted}>Settings</Eyebrow>
+      <h1 style={{fontFamily:font,fontSize:T.display,fontWeight:700,color:C.bright,letterSpacing:"-0.02em",margin:`${S.xs}px 0 0`,lineHeight:1.05}}>Configuration</h1>
+      <div style={{fontSize:T.small,color:C.muted,marginTop:S.sm}}>Manage context, brand, integrations, and defaults.</div>
     </div>
-    <div style={{display:"grid",gridTemplateColumns:"220px 1fr",gap:24,alignItems:"flex-start"}}>
+    <div style={{display:"grid",gridTemplateColumns:"240px 1fr",gap:S.xxl,alignItems:"flex-start"}}>
       {/* Sub-nav */}
-      <div style={{display:"flex",flexDirection:"column",gap:4,position:"sticky",top:80}}>
-        {SETTINGS_SECTIONS.map(s=> (<button key={s.id} onClick={()=>setSection(s.id)} style={{textAlign:"left",padding:"10px 14px",fontSize:13,fontWeight:section===s.id?600:500,fontFamily:font,color:section===s.id?C.bright:C.muted,background:section===s.id?"rgba(217,170,90,0.06)":"transparent",border:section===s.id?`1px solid ${C.accentSoft}`:`1px solid transparent`,borderLeft:section===s.id?`3px solid ${C.accent}`:"3px solid transparent",borderRadius:8,cursor:"pointer",display:"block",transition:"all 0.15s"}}>
-          <div style={{whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{s.label}</div>
-        </button>))}
-      </div>
+      <nav style={{display:"flex",flexDirection:"column",gap:S.xs+1,position:"sticky",top:88,background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,padding:S.sm+2}}>
+        {SETTINGS_SECTIONS.map(s=>{const isActive=section===s.id;const color=SECTION_COLORS[s.id]||C.accent;
+          return (<button key={s.id} onClick={()=>setSection(s.id)} style={{textAlign:"left",padding:`${S.md-2}px ${S.md+2}px`,fontSize:T.small,fontWeight:isActive?600:500,fontFamily:font,color:isActive?C.bright:C.muted,background:isActive?`${color}1A`:"transparent",border:isActive?`1px solid ${color}55`:`1px solid transparent`,borderLeft:isActive?`3px solid ${color}`:"3px solid transparent",borderRadius:8,cursor:"pointer",display:"block",transition:"all 0.15s"}}>
+            <div style={{whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{s.label}</div>
+            <div style={{fontSize:T.eyebrow,color:C.dim,marginTop:S.xs/2,fontWeight:400,whiteSpace:"normal",lineHeight:1.4}}>{s.desc}</div>
+          </button>);
+        })}
+      </nav>
       {/* Content */}
       <div style={{minWidth:0}}>
-        {section==="context"&&(<div>
-          <Heading desc="Files informing AI generation across Analytics insights and content drafts. Toggle each on/off to control what's active.">Context Files</Heading>
+        {section==="context"&&(<SectionCard accent={SECTION_COLORS.context}>
+          <Heading eyebrow="Context" accent={SECTION_COLORS.context} desc="Files informing AI generation across Analytics insights and content drafts. Toggle each on/off to control what's active.">Context files</Heading>
           <ContextFilesPanel ctxFiles={ctxFiles} show={true} onToggle={()=>{}} hideClose={true}/>
-        </div>)}
-        {section==="brand"&&(<div>
-          <Heading desc="Upload logos, brand marks, and visual references. Descriptions inform AI artwork generation.">Brand Assets</Heading>
+        </SectionCard>)}
+        {section==="brand"&&(<SectionCard accent={SECTION_COLORS.brand}>
+          <Heading eyebrow="Brand" accent={SECTION_COLORS.brand} desc="Upload logos, brand marks, and visual references. Descriptions inform AI artwork generation.">Brand assets</Heading>
           <BrandAssetsPanel brandAssets={brandAssets} show={true} onToggle={()=>{}} hideClose={true}/>
-        </div>)}
-        {section==="integrations"&&(<div>
-          <Heading desc="Connected services and API keys.">Integrations</Heading>
-          <div style={{display:"grid",gap:12}}>
+        </SectionCard>)}
+        {section==="integrations"&&(<SectionCard accent={SECTION_COLORS.integrations}>
+          <Heading eyebrow="Integrations" accent={SECTION_COLORS.integrations} desc="Connected services and API keys.">Integrations</Heading>
+          <div style={{display:"grid",gap:S.md}}>
             {[
               {name:"Umami Cloud",desc:"Privacy-friendly analytics",status:"connected",color:C.green},
-              {name:"Groq AI",desc:"Llama 3.3 70B for content & insights",status:"connected",color:C.green},
-              {name:"PageSpeed Insights",desc:"Performance & Core Web Vitals",status:"connected",color:C.green},
-              {name:"SEO Score API",desc:"82-check SEO audit",status:"connected",color:C.green},
+              {name:"Groq AI",desc:"Llama 3.3 70B + 3.1 8B Instant for content & insights",status:"connected",color:C.green},
+              {name:"Google PageSpeed Insights",desc:"Performance, SEO, accessibility audits (Lighthouse)",status:"connected",color:C.green},
+              {name:"Supabase",desc:"Auth, data storage, file storage",status:"connected",color:C.green},
               {name:"Telegram Bot",desc:"Funnel attribution & community management",status:"coming_soon",color:C.dim},
               {name:"X / Twitter Posting",desc:"Automated post scheduling",status:"coming_soon",color:C.dim},
-            ].map((int,i)=>(<div key={i} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,padding:"14px 18px",display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+            ].map((int,i)=>(<div key={i} style={{background:C.surfaceElevated,border:`1px solid ${C.border}`,borderRadius:10,padding:`${S.md+2}px ${S.lg+2}px`,display:"flex",alignItems:"center",gap:S.md,flexWrap:"wrap"}}>
               <div style={{flex:1,minWidth:200}}>
-                <div style={{fontSize:14,fontWeight:600,color:C.bright,marginBottom:2}}>{int.name}</div>
-                <div style={{fontSize:11,color:C.dim}}>{int.desc}</div>
+                <div style={{fontSize:T.body+1,fontWeight:600,color:C.bright,marginBottom:S.xs/2}}>{int.name}</div>
+                <div style={{fontSize:T.caption-1,color:C.dim}}>{int.desc}</div>
               </div>
-              <span style={{fontSize:10,fontWeight:600,fontFamily:mono,color:int.color,padding:"3px 10px",background:`${int.color}15`,border:`1px solid ${int.color}30`,borderRadius:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>{int.status==="connected"?"● Connected":"○ Coming soon"}</span>
+              <span style={{fontSize:T.eyebrow,fontWeight:700,fontFamily:mono,color:int.color,padding:`${S.xs-1}px ${S.md-2}px`,background:`${int.color}1A`,border:`1px solid ${int.color}40`,borderRadius:4,textTransform:"uppercase",letterSpacing:"0.08em"}}>{int.status==="connected"?"● Connected":"○ Coming soon"}</span>
             </div>))}
           </div>
-        </div>)}
-        {section==="site"&&(<div>
-          <Heading desc="Domain and analytics tracking source.">Site</Heading>
-          <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"22px 24px"}}>
-            <div style={{display:"grid",gap:14}}>
-              <div>
-                <label style={{display:"block",fontSize:11,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Site Name</label>
-                <input value={defaults.siteName||""} onChange={e=>onUpdateDefaults({siteName:e.target.value})} placeholder="Honoroll" style={{width:"100%",background:"rgba(200,205,211,0.05)",border:`1px solid ${C.border}`,borderRadius:8,padding:"10px 12px",fontSize:13,fontFamily:font,color:C.bright,outline:"none",boxSizing:"border-box"}}/>
-                <div style={{fontSize:10,color:C.dim,marginTop:4,fontFamily:mono}}>Shown in the Analytics tab header.</div>
-              </div>
-              <div>
-                <label style={{display:"block",fontSize:11,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Domain</label>
-                <input value={defaults.siteDomain||""} onChange={e=>onUpdateDefaults({siteDomain:e.target.value.trim()})} placeholder="honoroll.io" style={{width:"100%",background:"rgba(200,205,211,0.05)",border:`1px solid ${C.border}`,borderRadius:8,padding:"10px 12px",fontSize:13,fontFamily:mono,color:C.bright,outline:"none",boxSizing:"border-box"}}/>
-                <div style={{fontSize:10,color:C.dim,marginTop:4,fontFamily:mono}}>Used for PageSpeed and SEO audits. No protocol — just the bare domain.</div>
-              </div>
-              <div>
-                <label style={{display:"block",fontSize:11,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Umami Website ID</label>
-                <input value={defaults.umamiWebsiteId||""} onChange={e=>onUpdateDefaults({umamiWebsiteId:e.target.value.trim()})} placeholder="b383e359-7384-45e0-81b4-0a33ba905df3" style={{width:"100%",background:"rgba(200,205,211,0.05)",border:`1px solid ${C.border}`,borderRadius:8,padding:"10px 12px",fontSize:13,fontFamily:mono,color:C.bright,outline:"none",boxSizing:"border-box"}}/>
-                <div style={{fontSize:10,color:C.dim,marginTop:4,fontFamily:mono}}>UUID from cloud.umami.is. Drives all analytics queries.</div>
-              </div>
-              <div>
-                <label style={{display:"block",fontSize:11,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Mock data mode</label>
-                <button onClick={()=>onUpdateDefaults({useMockData:!defaults.useMockData})} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 14px",width:"100%",background:defaults.useMockData?"rgba(217,170,90,0.04)":"rgba(52,211,153,0.04)",border:`1px solid ${defaults.useMockData?C.accentSoft:C.greenBdr}`,borderRadius:8,cursor:"pointer",textAlign:"left"}}>
-                  <span style={{width:36,height:20,borderRadius:10,background:defaults.useMockData?C.accent:C.green,position:"relative",flexShrink:0,transition:"background 0.15s"}}>
-                    <span style={{position:"absolute",top:2,left:defaults.useMockData?18:2,width:16,height:16,borderRadius:"50%",background:C.bg,transition:"left 0.15s"}}/>
-                  </span>
-                  <span style={{fontSize:12,color:defaults.useMockData?C.accent:C.green,fontFamily:mono,fontWeight:600}}>{defaults.useMockData?"Mock data active":"Live data active"}</span>
-                  <span style={{fontSize:11,color:C.dim,marginLeft:"auto"}}>{defaults.useMockData?"Switch off when site goes live":"Switch on for offline demos"}</span>
-                </button>
-              </div>
+        </SectionCard>)}
+        {section==="site"&&(<SectionCard accent={SECTION_COLORS.site}>
+          <Heading eyebrow="Site" accent={SECTION_COLORS.site} desc="Domain and analytics tracking source.">Site</Heading>
+          <div style={{display:"grid",gap:S.lg-2}}>
+            <div>
+              <label style={{display:"block",marginBottom:S.sm-2}}><Eyebrow>Site Name</Eyebrow></label>
+              <input value={defaults.siteName||""} onChange={e=>onUpdateDefaults({siteName:e.target.value})} placeholder="Honoroll" style={{width:"100%",background:C.surfaceInset,border:`1px solid ${C.border}`,borderRadius:8,padding:`${S.md-2}px ${S.md}px`,fontSize:T.body,fontFamily:font,color:C.bright,outline:"none",boxSizing:"border-box"}}/>
+              <div style={{fontSize:T.eyebrow,color:C.dim,marginTop:S.xs,fontFamily:mono}}>Shown in the Analytics tab header.</div>
+            </div>
+            <div>
+              <label style={{display:"block",marginBottom:S.sm-2}}><Eyebrow>Domain</Eyebrow></label>
+              <input value={defaults.siteDomain||""} onChange={e=>onUpdateDefaults({siteDomain:e.target.value.trim()})} placeholder="honoroll.io" style={{width:"100%",background:C.surfaceInset,border:`1px solid ${C.border}`,borderRadius:8,padding:`${S.md-2}px ${S.md}px`,fontSize:T.body,fontFamily:mono,color:C.bright,outline:"none",boxSizing:"border-box"}}/>
+              <div style={{fontSize:T.eyebrow,color:C.dim,marginTop:S.xs,fontFamily:mono}}>Used for PageSpeed and SEO audits. No protocol — just the bare domain.</div>
+            </div>
+            <div>
+              <label style={{display:"block",marginBottom:S.sm-2}}><Eyebrow>Umami Website ID</Eyebrow></label>
+              <input value={defaults.umamiWebsiteId||""} onChange={e=>onUpdateDefaults({umamiWebsiteId:e.target.value.trim()})} placeholder="b383e359-7384-45e0-81b4-0a33ba905df3" style={{width:"100%",background:C.surfaceInset,border:`1px solid ${C.border}`,borderRadius:8,padding:`${S.md-2}px ${S.md}px`,fontSize:T.body,fontFamily:mono,color:C.bright,outline:"none",boxSizing:"border-box"}}/>
+              <div style={{fontSize:T.eyebrow,color:C.dim,marginTop:S.xs,fontFamily:mono}}>UUID from cloud.umami.is. Drives all analytics queries.</div>
+            </div>
+            <div>
+              <label style={{display:"block",marginBottom:S.sm-2}}><Eyebrow>Mock data mode</Eyebrow></label>
+              <button onClick={()=>onUpdateDefaults({useMockData:!defaults.useMockData})} style={{display:"flex",alignItems:"center",gap:S.md,padding:`${S.md-2}px ${S.md+2}px`,width:"100%",background:defaults.useMockData?C.accentSoft:C.greenSoft,border:`1px solid ${defaults.useMockData?C.accentBdr:C.greenBdr}`,borderRadius:8,cursor:"pointer",textAlign:"left"}}>
+                <span style={{width:36,height:20,borderRadius:10,background:defaults.useMockData?C.accent:C.green,position:"relative",flexShrink:0,transition:"background 0.15s"}}>
+                  <span style={{position:"absolute",top:2,left:defaults.useMockData?18:2,width:16,height:16,borderRadius:"50%",background:C.bg,transition:"left 0.15s"}}/>
+                </span>
+                <span style={{fontSize:T.caption,color:defaults.useMockData?C.accent:C.green,fontFamily:mono,fontWeight:600}}>{defaults.useMockData?"Mock data active":"Live data active"}</span>
+                <span style={{fontSize:T.caption-1,color:C.dim,marginLeft:"auto"}}>{defaults.useMockData?"Switch off when site goes live":"Switch on for offline demos"}</span>
+              </button>
             </div>
           </div>
-        </div>)}
-        {section==="defaults"&&(<div>
-          <Heading desc="Default values for new content generations.">Defaults</Heading>
-          <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"22px 24px"}}>
-            <div style={{display:"grid",gap:18}}>
-              <div>
-                <label style={{display:"block",fontSize:11,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Default tone</label>
-                <ToneSelector value={defaults.tone} onChange={t=>onUpdateDefaults({tone:t})}/>
-              </div>
-              <div>
-                <label style={{display:"block",fontSize:11,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Default post length</label>
-                <LengthPicker value={defaults.postLength} onChange={l=>onUpdateDefaults({postLength:l})}/>
-              </div>
-              <div>
-                <label style={{display:"block",fontSize:11,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Default thread length</label>
-                <LengthPicker value={defaults.threadLength} onChange={l=>onUpdateDefaults({threadLength:l})}/>
-              </div>
-              <div>
-                <label style={{display:"block",fontSize:11,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Default article length</label>
-                <LengthPicker value={defaults.articleLength} onChange={l=>onUpdateDefaults({articleLength:l})}/>
-              </div>
-              <div>
-                <label style={{display:"block",fontSize:11,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>AI model</label>
-                <div style={{display:"flex",flexDirection:"column",gap:8}}>{AI_MODELS.map(m=>{const active=(defaults.aiModel||DEFAULT_AI_MODEL)===m.id;
-                  return (<button key={m.id} onClick={()=>onUpdateDefaults({aiModel:m.id})} style={{textAlign:"left",padding:"12px 14px",fontSize:13,fontFamily:font,color:active?C.bright:C.text,background:active?C.accentSoft:"rgba(200,205,211,0.04)",border:`1px solid ${active?C.accent:C.border}`,borderRadius:8,cursor:"pointer"}}>
-                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:3}}>
-                      <span style={{width:10,height:10,borderRadius:"50%",background:active?C.accent:"transparent",border:`1px solid ${active?C.accent:C.border}`}}/>
-                      <span style={{fontWeight:600}}>{m.label}</span>
-                    </div>
-                    <div style={{fontSize:11,color:C.dim,marginLeft:18}}>{m.desc}</div>
-                  </button>);
-                })}</div>
-                <div style={{fontSize:10,color:C.dim,marginTop:6,fontFamily:mono}}>Applies to all AI generations: trend analysis, posts, threads, articles.</div>
-              </div>
+        </SectionCard>)}
+        {section==="defaults"&&(<SectionCard accent={SECTION_COLORS.defaults}>
+          <Heading eyebrow="Defaults" accent={SECTION_COLORS.defaults} desc="Default values for new content generations.">Generation defaults</Heading>
+          <div style={{display:"grid",gap:S.lg+2}}>
+            <div>
+              <label style={{display:"block",marginBottom:S.sm-2}}><Eyebrow>Default tone</Eyebrow></label>
+              <ToneSelector value={defaults.tone} onChange={t=>onUpdateDefaults({tone:t})}/>
+            </div>
+            <div>
+              <label style={{display:"block",marginBottom:S.sm-2}}><Eyebrow>Default post length</Eyebrow></label>
+              <LengthPicker value={defaults.postLength} onChange={l=>onUpdateDefaults({postLength:l})}/>
+            </div>
+            <div>
+              <label style={{display:"block",marginBottom:S.sm-2}}><Eyebrow>Default thread length</Eyebrow></label>
+              <LengthPicker value={defaults.threadLength} onChange={l=>onUpdateDefaults({threadLength:l})}/>
+            </div>
+            <div>
+              <label style={{display:"block",marginBottom:S.sm-2}}><Eyebrow>Default article length</Eyebrow></label>
+              <LengthPicker value={defaults.articleLength} onChange={l=>onUpdateDefaults({articleLength:l})}/>
+            </div>
+            <div>
+              <label style={{display:"block",marginBottom:S.sm-2}}><Eyebrow>AI model</Eyebrow></label>
+              <div style={{display:"flex",flexDirection:"column",gap:S.sm}}>{AI_MODELS.map(m=>{const active=(defaults.aiModel||DEFAULT_AI_MODEL)===m.id;
+                return (<button key={m.id} onClick={()=>onUpdateDefaults({aiModel:m.id})} style={{textAlign:"left",padding:`${S.md}px ${S.lg-2}px`,fontSize:T.body,fontFamily:font,color:active?C.bright:C.text,background:active?C.accentSoft:C.surfaceElevated,border:`1px solid ${active?C.accent:C.border}`,borderRadius:8,cursor:"pointer",transition:"all 0.15s"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:S.sm,marginBottom:S.xs-1}}>
+                    <span style={{width:10,height:10,borderRadius:"50%",background:active?C.accent:"transparent",border:`1px solid ${active?C.accent:C.border}`}}/>
+                    <span style={{fontWeight:600}}>{m.label}</span>
+                  </div>
+                  <div style={{fontSize:T.caption-1,color:C.dim,marginLeft:18}}>{m.desc}</div>
+                </button>);
+              })}</div>
+              <div style={{fontSize:T.eyebrow,color:C.dim,marginTop:S.sm-2,fontFamily:mono}}>Applies to all AI generations: trend analysis, posts, threads, articles.</div>
             </div>
           </div>
-        </div>)}
+        </SectionCard>)}
       </div>
     </div>
     {/* Footer */}
