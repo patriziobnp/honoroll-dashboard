@@ -1179,9 +1179,11 @@ const ContentCalendar=({history,onUpdateEntry,onDeleteEntry,onUploadImage})=>{
             </div>
           </div>
           <div style={{fontSize:14,color:C.text,lineHeight:1.6,whiteSpace:"pre-wrap"}}>{entry.fullText||entry.preview}</div>
-          {entry.image&&<div style={{marginTop:12,borderRadius:8,overflow:"hidden",border:`1px solid ${C.border}`,position:"relative"}}>
-            <img src={entry.image} alt="" style={{width:"100%",aspectRatio:"16/9",objectFit:"cover",display:"block"}}/>
-            <button onClick={()=>onUpdateEntry({...entry,image:null,imagePath:null})} title="Remove image" style={{position:"absolute",top:8,right:8,width:28,height:28,borderRadius:"50%",background:"rgba(11,14,17,0.85)",border:`1px solid ${C.border}`,color:C.red,cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
+          {entry.image&&<div style={{marginTop:12,display:"inline-block",position:"relative"}}>
+            <a href={entry.image} target="_blank" rel="noopener noreferrer" title="Open full size" style={{display:"block",borderRadius:8,overflow:"hidden",border:`1px solid ${C.border}`,width:140,height:140}}>
+              <img src={entry.image} alt="" style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
+            </a>
+            <button onClick={()=>onUpdateEntry({...entry,image:null,imagePath:null})} title="Remove image" style={{position:"absolute",top:-8,right:-8,width:24,height:24,borderRadius:"50%",background:"#1A1F25",border:`1px solid ${C.border}`,color:C.red,cursor:"pointer",fontSize:12,display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1}}>✕</button>
           </div>}
           {!entry.image&&<CalendarImageUpload entry={entry} onUpdateEntry={onUpdateEntry} onUploadImage={onUploadImage}/>}
         </div>
