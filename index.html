@@ -225,26 +225,40 @@ function useAnalyticsData(cfg,site,rangeId,compareMode) {
       const fmtM=(arr)=>(arr||[]).map(m=>({name:m.x,value:m.y}));
       const eventsByHour={};const eventNames=new Set();
       (eventSeries||[]).forEach(e=>{const h=fmtLabel(e.t);if(!eventsByHour[h])eventsByHour[h]={label:h};eventsByHour[h][e.x]=(eventsByHour[h][e.x]||0)+e.y;eventNames.add(e.x);});
-      let pageSpeed=null;
+      let pageSpeed=null,seoAudit=null;
       const psiCacheKey=`honoroll_pagespeed_${site.domain}`;
       const PSI_TTL_MS=24*60*60*1000;
       try{
         const cachedRaw=typeof localStorage!=="undefined"?localStorage.getItem(psiCacheKey):null;
-        if(cachedRaw){const cached=JSON.parse(cachedRaw);if(cached&&cached.timestamp&&(Date.now()-cached.timestamp)<PSI_TTL_MS&&cached.data){pageSpeed=cached.data;}}
+        if(cachedRaw){const cached=JSON.parse(cachedRaw);if(cached&&cached.timestamp&&(Date.now()-cached.timestamp)<PSI_TTL_MS){
+          if(cached.pageSpeed)pageSpeed=cached.pageSpeed;
+          if(cached.seoAudit)seoAudit=cached.seoAudit;
+        }}
       }catch(e){}
-      if(!pageSpeed){
+      if(!pageSpeed||!seoAudit){
         try{const psiRes=await authedFetch(`/api/pagespeed?domain=${encodeURIComponent(site.domain)}`);
-          if(psiRes.ok){const psi=await psiRes.json();const cats=psi.lighthouseResult?.categories||{};const a=psi.lighthouseResult?.audits||{};
+          if(psiRes.ok){const psi=await psiRes.json();const lh=psi.lighthouseResult||{};const cats=lh.categories||{};const a=lh.audits||{};
             pageSpeed={performance:Math.round((cats.performance?.score||0)*100),seo:Math.round((cats.seo?.score||0)*100),accessibility:Math.round((cats.accessibility?.score||0)*100),
               vitals:{LCP:{value:a["largest-contentful-paint"]?.displayValue||"—",rating:a["largest-contentful-paint"]?.score>=0.9?"good":a["largest-contentful-paint"]?.score>=0.5?"needs-improvement":"poor"},
                 FCP:{value:a["first-contentful-paint"]?.displayValue||"—",rating:a["first-contentful-paint"]?.score>=0.9?"good":a["first-contentful-paint"]?.score>=0.5?"needs-improvement":"poor"},
                 CLS:{value:a["cumulative-layout-shift"]?.displayValue||"—",rating:a["cumulative-layout-shift"]?.score>=0.9?"good":a["cumulative-layout-shift"]?.score>=0.5?"needs-improvement":"poor"},
                 TTFB:{value:a["server-response-time"]?.displayValue||"—",rating:a["server-response-time"]?.score>=0.9?"good":a["server-response-time"]?.score>=0.5?"needs-improvement":"poor"}}};
-            try{if(typeof localStorage!=="undefined")localStorage.setItem(psiCacheKey,JSON.stringify({timestamp:Date.now(),data:pageSpeed}));}catch(e){}
+            // Derive SEO audit from the same Lighthouse response — no separate third-party call
+            const seoCat=cats.seo;
+            if(seoCat){
+              const score=Math.round((seoCat.score||0)*100);
+              const grade=score>=90?"A":score>=80?"B":score>=70?"C":score>=60?"D":"F";
+              const priorities=(seoCat.auditRefs||[])
+                .map(ref=>({ref,audit:a[ref.id]}))
+                .filter(({audit})=>audit&&audit.score!==null&&audit.score<1&&!["informative","notApplicable","manual"].includes(audit.scoreDisplayMode))
+                .sort((x,y)=>(y.ref.weight||0)-(x.ref.weight||0))
+                .slice(0,6)
+                .map(({audit})=>({issue:audit.title||audit.id,severity:audit.score===0?"warning":"info"}));
+              seoAudit={score,grade,priorities};
+            }
+            try{if(typeof localStorage!=="undefined")localStorage.setItem(psiCacheKey,JSON.stringify({timestamp:Date.now(),pageSpeed,seoAudit}));}catch(e){}
           }}catch(e){}
       }
-      let seoAudit=null;
-      try{const sR=await authedFetch(`/api/seo?domain=${encodeURIComponent(site.domain)}`);if(sR.ok)seoAudit=await sR.json();}catch(e){}
       setData({statsToday,statsYesterday,active:active.visitors||0,timeSeries:timeData,unit,
         pages:fmtM(pages),referrers:fmtM(referrers),countries:fmtM(countries).map(c=>({...c,code:c.name.length===2?c.name:""})),
         browsers:fmtM(browsers),devices:fmtM(devices),os:fmtM(os),events:fmtM(events),
@@ -539,7 +553,7 @@ const Dashboard=({cfg,site,useMock,onSettings,rangeId,onRangeChange,compareMode,
     {/* AI Insights — has its own date range internally */}
     <AIInsights analyticsData={data} contextFiles={contextFiles}/>
     {/* Site Health */}
-    {(data.pageSpeed||data.seoAudit)&&<><Heading desc="PageSpeed Insights + SEO Score API. Current state, not date-range dependent.">Site Health</Heading><SiteHealth pagespeed={data.pageSpeed} seoscore={data.seoAudit}/></>}
+    {(data.pageSpeed||data.seoAudit)&&<><Heading desc="Google Lighthouse via PageSpeed Insights. Current state, refreshed once per day.">Site Health</Heading><SiteHealth pagespeed={data.pageSpeed} seoscore={data.seoAudit}/></>}
     {/* Sticky range bar — controls everything below */}
     <StickyRangeBar rangeId={rangeId} onRangeChange={onRangeChange} compareMode={compareMode} onCompareChange={onCompareChange} onRefresh={handleRefresh} lastUpdated={lastUpdated} refreshing={refreshing||loading}/>
     {/* KPIs */}
