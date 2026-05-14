@@ -679,18 +679,21 @@ const SchedulePicker=({onPick,onClose,scheduledDate})=>{
   const today=new Date();const days=[];
   for(let i=0;i<14;i++){const d=new Date(today);d.setDate(d.getDate()+i);days.push(d);}
   const dayNames=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
-  return (<div style={{position:"absolute",top:"100%",right:0,zIndex:1000,background:"#1A1F25",border:`1px solid ${C.border}`,borderRadius:10,padding:14,width:280,marginTop:6,animation:"fadeIn 0.2s ease-out",boxShadow:"0 8px 32px rgba(0,0,0,0.5)"}}>
-    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-      <span style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em"}}>{scheduledDate?"Reschedule":"Schedule for"}</span>
-      <button onClick={onClose} style={{background:"none",border:"none",color:C.dim,cursor:"pointer",fontSize:14}}>✕</button>
-    </div>
-    {scheduledDate&&<div style={{fontSize:10,color:C.green,fontFamily:mono,marginBottom:10,padding:"6px 10px",background:C.greenSoft,border:`1px solid ${C.greenBdr}`,borderRadius:6}}>● Currently scheduled: {scheduledDate}</div>}
-    <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4}}>
-      {dayNames.map(d=> <div key={d} style={{textAlign:"center",fontSize:8,color:C.dim,fontFamily:mono,padding:2}}>{d}</div>)}
-      {Array(days[0].getDay()).fill(null).map((_,i)=> <div key={`pad-${i}`}/>)}
-      {days.map(d=>{const key=ymd(d);const isToday=d.toDateString()===today.toDateString();const isScheduled=key===scheduledDate;
-        return (<button key={key} onClick={()=>onPick(key)} style={{padding:"6px 2px",fontSize:12,fontFamily:mono,fontWeight:(isScheduled||isToday)?700:400,color:isScheduled?C.bg:isToday?C.accent:C.text,background:isScheduled?C.green:isToday?"rgba(217,170,90,0.08)":"transparent",border:`1px solid ${isScheduled?C.green:isToday?C.accentSoft:"transparent"}`,borderRadius:6,cursor:"pointer"}}>{d.getDate()}</button>);
-      })}
+  // Fixed-position modal: backdrop closes on click, picker is centered on screen
+  return (<div onClick={onClose} style={{position:"fixed",inset:0,zIndex:9999,background:"rgba(0,0,0,0.55)",backdropFilter:"blur(2px)",display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"80px 20px",animation:"fadeIn 0.15s ease-out"}}>
+    <div onClick={(e)=>e.stopPropagation()} style={{background:"#1A1F25",border:`1px solid ${C.border}`,borderRadius:12,padding:16,width:300,boxShadow:"0 16px 48px rgba(0,0,0,0.6)"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+        <span style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em"}}>{scheduledDate?"Reschedule":"Schedule for"}</span>
+        <button onClick={onClose} style={{background:"none",border:"none",color:C.dim,cursor:"pointer",fontSize:14}}>✕</button>
+      </div>
+      {scheduledDate&&<div style={{fontSize:10,color:C.green,fontFamily:mono,marginBottom:10,padding:"6px 10px",background:C.greenSoft,border:`1px solid ${C.greenBdr}`,borderRadius:6}}>● Currently scheduled: {scheduledDate}</div>}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4}}>
+        {dayNames.map(d=> <div key={d} style={{textAlign:"center",fontSize:9,color:C.dim,fontFamily:mono,padding:2}}>{d}</div>)}
+        {Array(days[0].getDay()).fill(null).map((_,i)=> <div key={`pad-${i}`}/>)}
+        {days.map(d=>{const key=ymd(d);const isToday=d.toDateString()===today.toDateString();const isScheduled=key===scheduledDate;
+          return (<button key={key} onClick={()=>onPick(key)} style={{padding:"8px 2px",fontSize:13,fontFamily:mono,fontWeight:(isScheduled||isToday)?700:400,color:isScheduled?C.bg:isToday?C.accent:C.text,background:isScheduled?C.green:isToday?"rgba(217,170,90,0.08)":"transparent",border:`1px solid ${isScheduled?C.green:isToday?C.accentSoft:"transparent"}`,borderRadius:6,cursor:"pointer"}}>{d.getDate()}</button>);
+        })}
+      </div>
     </div>
   </div>);
 };
