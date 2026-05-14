@@ -304,6 +304,7 @@ async function callLLM(systemPrompt,userMessage,maxTokens=4096){
     let msg="";
     try{const j=await res.json();msg=j.error||"";}catch(e){msg=await res.text().catch(()=>"");}
     if(res.status===429)throw new Error(typeof msg==="string"&&msg.length<200?msg:"Rate limit reached. Wait 30–60s and try again.");
+    if(res.status===413)throw new Error("Request too large for the selected AI model. Disable some context files in Settings, or switch to Llama 3.3 70B which has a larger per-request budget.");
     throw new Error(`API error ${res.status}: ${String(msg).slice(0,200)}`);
   }
   const d=await res.json();return (d.text||"").replace(/```json|```/g,"").trim();
@@ -1122,18 +1123,27 @@ const ContextFilesPanel=({ctxFiles,show,onToggle,hideClose})=>{
 };
 
 // Build context string for prompts from active files
+// Cap the combined active-context payload at ~8000 chars (~2000 tokens) so the
+// LLM request stays inside Groq's per-minute TPM budget even on 8B Instant.
+const MAX_CONTEXT_CHARS=8000;
 const buildContextString=(files)=>{
   const active=(files||[]).filter(f=>f.active);
   if(active.length===0) return "";
+  // Compute per-file budget; reserve a small wrapper allowance
+  const perFile=Math.max(400,Math.floor((MAX_CONTEXT_CHARS-200)/active.length));
+  const truncate=(s)=>{if(!s)return"";if(s.length<=perFile)return s;return s.slice(0,perFile-30).trimEnd()+"\n…[truncated]";};
   const sections=CONTEXT_CATEGORIES.map(cat=>{
     const catFiles=active.filter(f=>f.category===cat.id);
     if(catFiles.length===0) return null;
     const sectionHeader=`### ${cat.label.toUpperCase()} CONTEXT`;
-    const filesContent=catFiles.map(f=>`[${f.label}]\n${f.content}`).join("\n\n");
+    const filesContent=catFiles.map(f=>`[${f.label}]\n${truncate(f.content)}`).join("\n\n");
     return `${sectionHeader}\n${filesContent}`;
   }).filter(Boolean);
   if(sections.length===0) return "";
-  return `\n\n=== USER-PROVIDED CONTEXT (use this as primary source of truth for brand voice, product details, audience, and current campaigns) ===\n\n${sections.join("\n\n")}\n\n=== END USER CONTEXT ===\n`;
+  let assembled=`\n\n=== USER-PROVIDED CONTEXT (use this as primary source of truth for brand voice, product details, audience, and current campaigns) ===\n\n${sections.join("\n\n")}\n\n=== END USER CONTEXT ===\n`;
+  // Hard cap as a safety net (in case many small files exceed budget collectively)
+  if(assembled.length>MAX_CONTEXT_CHARS+400){assembled=assembled.slice(0,MAX_CONTEXT_CHARS)+"\n…[context truncated to fit request budget]\n=== END USER CONTEXT ===\n";}
+  return assembled;
 };
 
 // ─── Brand Assets Panel ──────────────────────────────────────────────────────
