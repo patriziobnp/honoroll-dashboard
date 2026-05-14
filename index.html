@@ -675,35 +675,22 @@ const StatusBadge=({status})=> <span style={{fontSize:9,fontWeight:700,fontFamil
 // ─── Schedule Picker ─────────────────────────────────────────────────────────
 // Local-timezone YYYY-MM-DD formatter (avoid UTC drift from toISOString)
 const ymd=(d)=>{const y=d.getFullYear();const m=String(d.getMonth()+1).padStart(2,"0");const day=String(d.getDate()).padStart(2,"0");return `${y}-${m}-${day}`;};
-const SchedulePicker=({onPick,onClose,scheduledDate})=>{
-  const today=new Date();const days=[];
-  for(let i=0;i<14;i++){const d=new Date(today);d.setDate(d.getDate()+i);days.push(d);}
-  const dayNames=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
-  // Fixed-position modal: backdrop closes on click, picker is centered on screen
-  return (<div onClick={onClose} style={{position:"fixed",inset:0,zIndex:9999,background:"rgba(0,0,0,0.55)",backdropFilter:"blur(2px)",display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"80px 20px",animation:"fadeIn 0.15s ease-out"}}>
-    <div onClick={(e)=>e.stopPropagation()} style={{background:"#1A1F25",border:`1px solid ${C.border}`,borderRadius:12,padding:16,width:300,boxShadow:"0 16px 48px rgba(0,0,0,0.6)"}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-        <span style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em"}}>{scheduledDate?"Reschedule":"Schedule for"}</span>
-        <button onClick={onClose} style={{background:"none",border:"none",color:C.dim,cursor:"pointer",fontSize:14}}>✕</button>
-      </div>
-      {scheduledDate&&<div style={{fontSize:10,color:C.green,fontFamily:mono,marginBottom:10,padding:"6px 10px",background:C.greenSoft,border:`1px solid ${C.greenBdr}`,borderRadius:6}}>● Currently scheduled: {scheduledDate}</div>}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4}}>
-        {dayNames.map(d=> <div key={d} style={{textAlign:"center",fontSize:9,color:C.dim,fontFamily:mono,padding:2}}>{d}</div>)}
-        {Array(days[0].getDay()).fill(null).map((_,i)=> <div key={`pad-${i}`}/>)}
-        {days.map(d=>{const key=ymd(d);const isToday=d.toDateString()===today.toDateString();const isScheduled=key===scheduledDate;
-          return (<button key={key} onClick={()=>onPick(key)} style={{padding:"8px 2px",fontSize:13,fontFamily:mono,fontWeight:(isScheduled||isToday)?700:400,color:isScheduled?C.bg:isToday?C.accent:C.text,background:isScheduled?C.green:isToday?"rgba(217,170,90,0.08)":"transparent",border:`1px solid ${isScheduled?C.green:isToday?C.accentSoft:"transparent"}`,borderRadius:6,cursor:"pointer"}}>{d.getDate()}</button>);
-        })}
-      </div>
-    </div>
-  </div>);
-};
-
+// Native browser date picker — no custom popup, no stacking-context issues.
+// The hidden <input type="date"> is anchored to the button via a relative wrapper;
+// clicking the button calls showPicker() to open the browser's calendar.
 const ScheduleBtn=({onSchedule,scheduledDate})=>{
-  const[show,setShow]=useState(false);
-  return (<div style={{position:"relative",display:"inline-block",zIndex:show?1000:"auto"}}>
-    <button onClick={()=>setShow(!show)} style={{fontSize:11,fontFamily:mono,color:scheduledDate?C.green:C.accent,background:scheduledDate?C.greenSoft:"none",border:`1px solid ${scheduledDate?C.greenBdr:C.accentSoft}`,borderRadius:6,padding:"4px 10px",cursor:"pointer"}}>📅 {scheduledDate?"Scheduled":"Schedule"}</button>
-    {show&&<SchedulePicker onPick={(date)=>{onSchedule(date);setShow(false);}} onClose={()=>setShow(false)} scheduledDate={scheduledDate}/>}
-  </div>);
+  const inputRef=React.useRef(null);
+  const todayStr=ymd(new Date());
+  const openPicker=()=>{
+    const el=inputRef.current;if(!el)return;
+    if(typeof el.showPicker==="function"){try{el.showPicker();return;}catch(e){}}
+    el.focus();el.click();
+  };
+  const label=scheduledDate?`Scheduled · ${scheduledDate}`:"Schedule";
+  return (<span style={{position:"relative",display:"inline-block"}}>
+    <button onClick={openPicker} style={{fontSize:11,fontFamily:mono,color:scheduledDate?C.green:C.accent,background:scheduledDate?C.greenSoft:"none",border:`1px solid ${scheduledDate?C.greenBdr:C.accentSoft}`,borderRadius:6,padding:"4px 10px",cursor:"pointer"}}>📅 {label}</button>
+    <input ref={inputRef} type="date" min={todayStr} defaultValue={scheduledDate||""} onChange={(e)=>{if(e.target.value)onSchedule(e.target.value);}} style={{position:"absolute",left:0,top:"100%",width:1,height:1,opacity:0,pointerEvents:"none"}}/>
+  </span>);
 };
 
 // ─── Prompt Templates ────────────────────────────────────────────────────────
