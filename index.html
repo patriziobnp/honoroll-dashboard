@@ -2248,17 +2248,22 @@ const SETTINGS_SECTIONS=[
   {id:"defaults",label:"Defaults",desc:"Default tone, length, generation settings"},
 ];
 
-const SettingsPage=({ctxFiles,brandAssets,defaults,onUpdateDefaults})=>{
+const SettingsPage=({ctxFiles,brandAssets,defaults,onUpdateDefaults,saveState})=>{
   const[section,setSection]=useState("context");
   const[showContext,setShowContext]=useState(true);
   const[showAssets,setShowAssets]=useState(true);
 
   return (<div style={{maxWidth:1280,margin:"0 auto",padding:`${S.xl}px ${S.lg+4}px`,position:"relative"}}>
     <PageBackdrop color="rgba(176,90,217,0.05)"/>
-    <div style={{position:"relative",zIndex:1,marginBottom:S.xxxl,paddingBottom:S.xl,borderBottom:`1px solid ${C.border}`}}>
-      <Eyebrow color={C.muted}>Settings</Eyebrow>
-      <h1 style={{fontFamily:font,fontSize:T.display,fontWeight:700,color:C.bright,letterSpacing:"-0.02em",margin:`${S.xs}px 0 0`,lineHeight:1.05}}>Configuration</h1>
-      <div style={{fontSize:T.small,color:C.muted,marginTop:S.sm}}>Manage context, brand, integrations, and defaults.</div>
+    <div style={{position:"relative",zIndex:1,marginBottom:S.xxxl,paddingBottom:S.xl,borderBottom:`1px solid ${C.border}`,display:"flex",justifyContent:"space-between",alignItems:"flex-end",flexWrap:"wrap",gap:S.lg}}>
+      <div>
+        <Eyebrow color={C.muted}>Settings</Eyebrow>
+        <h1 style={{fontFamily:font,fontSize:T.display,fontWeight:700,color:C.bright,letterSpacing:"-0.02em",margin:`${S.xs}px 0 0`,lineHeight:1.05}}>Configuration</h1>
+        <div style={{fontSize:T.small,color:C.muted,marginTop:S.sm}}>Manage context, brand, integrations, and defaults.</div>
+      </div>
+      {saveState&&saveState!=="idle"&&<div style={{display:"inline-flex",alignItems:"center",gap:S.sm,fontSize:T.caption,fontFamily:mono,fontWeight:600,color:saveState==="saved"?C.green:C.muted,padding:`${S.sm-2}px ${S.md+2}px`,background:saveState==="saved"?C.greenSoft:C.surfaceElevated,border:`1px solid ${saveState==="saved"?C.greenBdr:C.border}`,borderRadius:8,animation:"fadeIn 0.2s ease-out"}}>
+        {saveState==="saved"?<><span style={{color:C.green}}>✓</span><span>Saved</span></>:<><span style={{display:"inline-flex",gap:3}}>{[0,1,2].map(i=>(<span key={i} style={{width:4,height:4,borderRadius:"50%",background:C.muted,animation:`pulse 1.2s ease-in-out ${i*0.2}s infinite`}}/>))}</span><span>Saving</span></>}
+      </div>}
     </div>
     <div style={{display:"grid",gridTemplateColumns:"240px 1fr",gap:S.xxl,alignItems:"flex-start"}}>
       {/* Sub-nav */}
@@ -2350,16 +2355,22 @@ const SettingsPage=({ctxFiles,brandAssets,defaults,onUpdateDefaults})=>{
             </div>
             <div>
               <label style={{display:"block",marginBottom:S.sm-2}}><Eyebrow>AI model</Eyebrow></label>
-              <div style={{display:"flex",flexDirection:"column",gap:S.sm}}>{AI_MODELS.map(m=>{const active=(defaults.aiModel||DEFAULT_AI_MODEL)===m.id;
-                return (<button key={m.id} onClick={()=>onUpdateDefaults({aiModel:m.id})} style={{textAlign:"left",padding:`${S.md}px ${S.lg-2}px`,fontSize:T.body,fontFamily:font,color:active?C.bright:C.text,background:active?C.accentSoft:C.surfaceElevated,border:`1px solid ${active?C.accent:C.border}`,borderRadius:8,cursor:"pointer",transition:"all 0.15s"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:S.sm,marginBottom:S.xs-1}}>
-                    <span style={{width:10,height:10,borderRadius:"50%",background:active?C.accent:"transparent",border:`1px solid ${active?C.accent:C.border}`}}/>
-                    <span style={{fontWeight:600}}>{m.label}</span>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(280px, 1fr))",gap:S.md}}>{AI_MODELS.map(m=>{const active=(defaults.aiModel||DEFAULT_AI_MODEL)===m.id;
+                return (<button key={m.id} onClick={()=>onUpdateDefaults({aiModel:m.id})} className="tile-hover" style={{textAlign:"left",padding:`${S.lg}px ${S.lg+2}px`,fontSize:T.body,fontFamily:font,color:active?C.bright:C.text,background:active?C.accentSoft:C.surfaceElevated,border:`1px solid ${active?C.accent:C.border}`,borderRadius:12,cursor:"pointer",transition:"all 0.18s",position:"relative"}}>
+                  <div style={{display:"flex",alignItems:"flex-start",gap:S.md,marginBottom:S.sm+2}}>
+                    <span style={{width:36,height:36,borderRadius:10,background:active?`linear-gradient(135deg,${C.accent},${C.accentBright})`:C.surfaceInset,border:active?"none":`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,color:active?C.bg:C.muted,flexShrink:0,fontWeight:700}}>{m.icon}</span>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{display:"flex",alignItems:"center",gap:S.sm,flexWrap:"wrap"}}>
+                        <span style={{fontWeight:600,color:C.bright}}>{m.label}</span>
+                        <span style={{display:"inline-flex",alignItems:"center",fontSize:T.eyebrow,fontWeight:700,fontFamily:mono,color:active?C.accent:C.muted,textTransform:"uppercase",letterSpacing:"0.08em",padding:`${S.xs-1}px ${S.sm}px`,background:active?C.accentSoft:C.surfaceInset,border:`1px solid ${active?C.accentBdr:C.border}`,borderRadius:4}}>{m.tag}</span>
+                      </div>
+                    </div>
+                    <span style={{width:14,height:14,borderRadius:"50%",background:active?C.accent:"transparent",border:`1.5px solid ${active?C.accent:C.borderStrong}`,flexShrink:0,marginTop:2,boxShadow:active?`0 0 8px ${C.accent}66`:"none"}}/>
                   </div>
-                  <div style={{fontSize:T.caption-1,color:C.dim,marginLeft:18}}>{m.desc}</div>
+                  <div style={{fontSize:T.caption-1,color:C.dim,lineHeight:1.5}}>{m.desc}</div>
                 </button>);
               })}</div>
-              <div style={{fontSize:T.eyebrow,color:C.dim,marginTop:S.sm-2,fontFamily:mono}}>Applies to all AI generations: trend analysis, posts, threads, articles.</div>
+              <div style={{fontSize:T.eyebrow,color:C.dim,marginTop:S.md,fontFamily:mono}}>Applies to all AI generations: trend analysis, posts, threads, articles.</div>
             </div>
           </div>
         </SectionCard>)}
@@ -2441,8 +2452,8 @@ const useContextFiles=(user)=>{
 // ─── Data: useUserSettings hook (Supabase) ────────────────────────────────────
 // Single row per user (auto-created by trigger on signup). Uses upsert defensively.
 const AI_MODELS=[
-  {id:"llama-3.3-70b-versatile",label:"Llama 3.3 70B",desc:"Higher quality. Slower. Tight rate limit on free tier."},
-  {id:"llama-3.1-8b-instant",label:"Llama 3.1 8B Instant",desc:"Faster, much higher rate limit. Best for high-volume drafting."},
+  {id:"llama-3.3-70b-versatile",label:"Llama 3.3 70B",tag:"Quality",icon:"◉",desc:"Higher quality output. Slower (~10-15s). Tight rate limit on Groq free tier — best for important pieces."},
+  {id:"llama-3.1-8b-instant",label:"Llama 3.1 8B Instant",tag:"Speed",icon:"⚡",desc:"Faster (~2-4s), much higher rate limit. Best for high-volume drafting and quick iteration."},
 ];
 const DEFAULT_AI_MODEL="llama-3.3-70b-versatile";
 const DEFAULT_SITE_NAME="Honoroll";
@@ -2481,10 +2492,15 @@ const useUserSettings=(user)=>{
   const settingsRef=useRef(settings);
   useEffect(()=>{settingsRef.current=settings;},[settings]);
   const upsertTimerRef=useRef(null);
+  // `saveState` lets the UI surface a "Saving / Saved" hint without callers
+  // needing to track promises themselves. Cycles idle → saving → saved → idle.
+  const[saveState,setSaveState]=useState("idle");
+  const saveTimerRef=useRef(null);
   const updateSettings=(patch)=>{
     const next={...settingsRef.current,...patch};
     settingsRef.current=next;
     setSettings(next);
+    setSaveState("saving");
     // Debounce the network call by 400ms - the last call within the window wins
     if(upsertTimerRef.current)clearTimeout(upsertTimerRef.current);
     upsertTimerRef.current=setTimeout(async()=>{
@@ -2492,11 +2508,14 @@ const useUserSettings=(user)=>{
       try{
         const{error:e}=await sb.from("user_settings").upsert(settingsToRow(settingsRef.current,user.id),{onConflict:"user_id"});
         if(e)throw e;
-      }catch(e){setError(e.message||"Failed to save settings");}
+        setSaveState("saved");
+        if(saveTimerRef.current)clearTimeout(saveTimerRef.current);
+        saveTimerRef.current=setTimeout(()=>setSaveState("idle"),2000);
+      }catch(e){setError(e.message||"Failed to save settings");setSaveState("idle");}
     },400);
   };
 
-  return {settings,loading,error,updateSettings};
+  return {settings,loading,error,updateSettings,saveState};
 };
 
 // ─── Data: useBrandAssets hook (Supabase + Storage) ──────────────────────────
@@ -2949,7 +2968,7 @@ function AuthenticatedApp({user,signOut}){
   return (<div style={{fontFamily:font,background:C.bg,color:C.text,minHeight:"100vh"}}>
     <Header active={tab} onChange={handleTabChange} onSettings={handleSettings} settingsActive={showSettings} user={user} onSignOut={signOut}/>
     <div>
-      {showSettings?(<div style={{animation:"fadeIn 0.3s ease-out"}}><SettingsPage ctxFiles={ctxFiles} brandAssets={brandAssets} defaults={userSettings.settings} onUpdateDefaults={userSettings.updateSettings}/></div>)
+      {showSettings?(<div style={{animation:"fadeIn 0.3s ease-out"}}><SettingsPage ctxFiles={ctxFiles} brandAssets={brandAssets} defaults={userSettings.settings} onUpdateDefaults={userSettings.updateSettings} saveState={userSettings.saveState}/></div>)
       :(<>
         {/* All tab panels are kept mounted; visibility is toggled via display:none so each tab keeps its in-memory state (analytics data, scroll position, drafts) until the user explicitly refreshes. */}
         <div style={{display:tab==="analytics"?"block":"none"}}><Dashboard cfg={KEYS} site={site} useMock={useMock} onSettings={handleSettings} rangeId={rangeId} onRangeChange={setRangeId} compareMode={compareMode} onCompareChange={setCompareMode} contextFiles={ctxFiles.files}/></div>
