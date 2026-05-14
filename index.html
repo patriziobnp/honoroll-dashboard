@@ -297,7 +297,12 @@ Rules:
 async function callLLM(systemPrompt,userMessage,maxTokens=4096){
   const res=await fetch("/api/groq",{method:"POST",headers:{"Content-Type":"application/json"},
     body:JSON.stringify({system:systemPrompt,user:userMessage,max_tokens:maxTokens,temperature:0.7})});
-  if(!res.ok){const e=await res.text().catch(()=>"");throw new Error(`API error ${res.status}: ${e.slice(0,200)}`);}
+  if(!res.ok){
+    let msg="";
+    try{const j=await res.json();msg=j.error||"";}catch(e){msg=await res.text().catch(()=>"");}
+    if(res.status===429)throw new Error(typeof msg==="string"&&msg.length<200?msg:"Rate limit reached. Wait 30–60s and try again.");
+    throw new Error(`API error ${res.status}: ${String(msg).slice(0,200)}`);
+  }
   const d=await res.json();return (d.text||"").replace(/```json|```/g,"").trim();
 }
 
