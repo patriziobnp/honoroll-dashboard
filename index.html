@@ -2637,9 +2637,10 @@ function AuthenticatedApp({user,signOut}){
     <div>
       {showSettings?(<div style={{animation:"fadeIn 0.3s ease-out"}}><SettingsPage ctxFiles={ctxFiles} brandAssets={brandAssets} defaults={userSettings.settings} onUpdateDefaults={userSettings.updateSettings}/></div>)
       :(<>
-        {tab==="analytics"&&<div style={{animation:"fadeIn 0.3s ease-out"}}><Dashboard cfg={KEYS} site={site} useMock={useMock} onSettings={handleSettings} rangeId={rangeId} onRangeChange={setRangeId} compareMode={compareMode} onCompareChange={setCompareMode} contextFiles={ctxFiles.files}/></div>}
-        {tab==="content"&&<div style={{animation:"fadeIn 0.3s ease-out"}}><ContentPage analyticsData={MOCK_DATA} contentState={contentState} setContentState={setContentState} contextFiles={ctxFiles.files} defaults={userSettings.settings} onUpdateDefaults={userSettings.updateSettings} calendarEntries={calendarEntries}/></div>}
-        {tab==="utm"&&<div style={{animation:"fadeIn 0.3s ease-out"}}><UtmPage utmLinks={utmLinks}/></div>}
+        {/* All tab panels are kept mounted; visibility is toggled via display:none so each tab keeps its in-memory state (analytics data, scroll position, drafts) until the user explicitly refreshes. */}
+        <div style={{display:tab==="analytics"?"block":"none"}}><Dashboard cfg={KEYS} site={site} useMock={useMock} onSettings={handleSettings} rangeId={rangeId} onRangeChange={setRangeId} compareMode={compareMode} onCompareChange={setCompareMode} contextFiles={ctxFiles.files}/></div>
+        <div style={{display:tab==="content"?"block":"none"}}><ContentPage analyticsData={MOCK_DATA} contentState={contentState} setContentState={setContentState} contextFiles={ctxFiles.files} defaults={userSettings.settings} onUpdateDefaults={userSettings.updateSettings} calendarEntries={calendarEntries}/></div>
+        <div style={{display:tab==="utm"?"block":"none"}}><UtmPage utmLinks={utmLinks}/></div>
       </>)}
     </div>
   </div>);
