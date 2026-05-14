@@ -1823,18 +1823,28 @@ const SettingsPage=({ctxFiles,brandAssets,defaults,onUpdateDefaults})=>{
             <div style={{display:"grid",gap:14}}>
               <div>
                 <label style={{display:"block",fontSize:11,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Site Name</label>
-                <input value="My Website" disabled style={{width:"100%",background:"rgba(200,205,211,0.04)",border:`1px solid ${C.border}`,borderRadius:8,padding:"10px 12px",fontSize:13,fontFamily:font,color:C.text,outline:"none",boxSizing:"border-box",cursor:"not-allowed"}}/>
+                <input value={defaults.siteName||""} onChange={e=>onUpdateDefaults({siteName:e.target.value})} placeholder="Honoroll" style={{width:"100%",background:"rgba(200,205,211,0.05)",border:`1px solid ${C.border}`,borderRadius:8,padding:"10px 12px",fontSize:13,fontFamily:font,color:C.bright,outline:"none",boxSizing:"border-box"}}/>
+                <div style={{fontSize:10,color:C.dim,marginTop:4,fontFamily:mono}}>Shown in the Analytics tab header.</div>
               </div>
               <div>
                 <label style={{display:"block",fontSize:11,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Domain</label>
-                <input value="example.com" disabled style={{width:"100%",background:"rgba(200,205,211,0.04)",border:`1px solid ${C.border}`,borderRadius:8,padding:"10px 12px",fontSize:13,fontFamily:mono,color:C.text,outline:"none",boxSizing:"border-box",cursor:"not-allowed"}}/>
+                <input value={defaults.siteDomain||""} onChange={e=>onUpdateDefaults({siteDomain:e.target.value.trim()})} placeholder="honoroll.io" style={{width:"100%",background:"rgba(200,205,211,0.05)",border:`1px solid ${C.border}`,borderRadius:8,padding:"10px 12px",fontSize:13,fontFamily:mono,color:C.bright,outline:"none",boxSizing:"border-box"}}/>
+                <div style={{fontSize:10,color:C.dim,marginTop:4,fontFamily:mono}}>Used for PageSpeed and SEO audits. No protocol — just the bare domain.</div>
+              </div>
+              <div>
+                <label style={{display:"block",fontSize:11,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Umami Website ID</label>
+                <input value={defaults.umamiWebsiteId||""} onChange={e=>onUpdateDefaults({umamiWebsiteId:e.target.value.trim()})} placeholder="b383e359-7384-45e0-81b4-0a33ba905df3" style={{width:"100%",background:"rgba(200,205,211,0.05)",border:`1px solid ${C.border}`,borderRadius:8,padding:"10px 12px",fontSize:13,fontFamily:mono,color:C.bright,outline:"none",boxSizing:"border-box"}}/>
+                <div style={{fontSize:10,color:C.dim,marginTop:4,fontFamily:mono}}>UUID from cloud.umami.is. Drives all analytics queries.</div>
               </div>
               <div>
                 <label style={{display:"block",fontSize:11,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Mock data mode</label>
-                <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",background:"rgba(217,170,90,0.04)",border:`1px solid ${C.accentSoft}`,borderRadius:8}}>
-                  <span style={{fontSize:12,color:C.accent,fontFamily:mono}}>● Mock data active</span>
-                  <span style={{fontSize:11,color:C.dim}}>Switch off when site goes live</span>
-                </div>
+                <button onClick={()=>onUpdateDefaults({useMockData:!defaults.useMockData})} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 14px",width:"100%",background:defaults.useMockData?"rgba(217,170,90,0.04)":"rgba(52,211,153,0.04)",border:`1px solid ${defaults.useMockData?C.accentSoft:C.greenBdr}`,borderRadius:8,cursor:"pointer",textAlign:"left"}}>
+                  <span style={{width:36,height:20,borderRadius:10,background:defaults.useMockData?C.accent:C.green,position:"relative",flexShrink:0,transition:"background 0.15s"}}>
+                    <span style={{position:"absolute",top:2,left:defaults.useMockData?18:2,width:16,height:16,borderRadius:"50%",background:C.bg,transition:"left 0.15s"}}/>
+                  </span>
+                  <span style={{fontSize:12,color:defaults.useMockData?C.accent:C.green,fontFamily:mono,fontWeight:600}}>{defaults.useMockData?"Mock data active":"Live data active"}</span>
+                  <span style={{fontSize:11,color:C.dim,marginLeft:"auto"}}>{defaults.useMockData?"Switch off when site goes live":"Switch on for offline demos"}</span>
+                </button>
               </div>
             </div>
           </div>
@@ -1957,9 +1967,12 @@ const AI_MODELS=[
   {id:"llama-3.1-8b-instant",label:"Llama 3.1 8B Instant",desc:"Faster, much higher rate limit. Best for high-volume drafting."},
 ];
 const DEFAULT_AI_MODEL="llama-3.3-70b-versatile";
-const DEFAULT_SETTINGS={tone:"founder",postLength:"normal",threadLength:"normal",articleLength:"normal",aiModel:DEFAULT_AI_MODEL};
-const rowToSettings=(r)=>({tone:r.tone||"founder",postLength:r.post_length||"normal",threadLength:r.thread_length||"normal",articleLength:r.article_length||"normal",aiModel:r.ai_model||DEFAULT_AI_MODEL});
-const settingsToRow=(s,userId)=>({user_id:userId,tone:s.tone,post_length:s.postLength,thread_length:s.threadLength,article_length:s.articleLength,ai_model:s.aiModel||DEFAULT_AI_MODEL});
+const DEFAULT_SITE_NAME="Honoroll";
+const DEFAULT_SITE_DOMAIN="honoroll.io";
+const DEFAULT_UMAMI_WEBSITE_ID="b383e359-7384-45e0-81b4-0a33ba905df3";
+const DEFAULT_SETTINGS={tone:"founder",postLength:"normal",threadLength:"normal",articleLength:"normal",aiModel:DEFAULT_AI_MODEL,siteName:DEFAULT_SITE_NAME,siteDomain:DEFAULT_SITE_DOMAIN,umamiWebsiteId:DEFAULT_UMAMI_WEBSITE_ID,useMockData:false};
+const rowToSettings=(r)=>({tone:r.tone||"founder",postLength:r.post_length||"normal",threadLength:r.thread_length||"normal",articleLength:r.article_length||"normal",aiModel:r.ai_model||DEFAULT_AI_MODEL,siteName:r.site_name||DEFAULT_SITE_NAME,siteDomain:r.site_domain||DEFAULT_SITE_DOMAIN,umamiWebsiteId:r.umami_website_id||DEFAULT_UMAMI_WEBSITE_ID,useMockData:!!r.use_mock_data});
+const settingsToRow=(s,userId)=>({user_id:userId,tone:s.tone,post_length:s.postLength,thread_length:s.threadLength,article_length:s.articleLength,ai_model:s.aiModel||DEFAULT_AI_MODEL,site_name:s.siteName||DEFAULT_SITE_NAME,site_domain:s.siteDomain||DEFAULT_SITE_DOMAIN,umami_website_id:s.umamiWebsiteId||DEFAULT_UMAMI_WEBSITE_ID,use_mock_data:!!s.useMockData});
 
 const useUserSettings=(user)=>{
   const[settings,setSettings]=useState(DEFAULT_SETTINGS);
@@ -2412,8 +2425,6 @@ function App(){
 
 // All the dashboard hooks/logic live here, only mounted when user is authenticated.
 function AuthenticatedApp({user,signOut}){
-  const USE_MOCK=false;
-  const[site]=useState(MOCK_SITE);
   const[tab,setTab]=useState("analytics");
   const[showSettings,setShowSettings]=useState(false);
   const[rangeId,setRangeId]=useState("24h");
@@ -2439,10 +2450,13 @@ function AuthenticatedApp({user,signOut}){
   const ctxFiles=useContextFiles(user);
   // One-time cleanup: drop old localStorage data (we no longer persist context_files there)
   useEffect(()=>{try{if(typeof localStorage!=="undefined")localStorage.removeItem("honoroll_context_files");}catch(e){}},[]);
-  // Defaults (tone, post/thread/article length, AI model) now stored in Supabase user_settings
+  // Defaults (tone, lengths, AI model, site info, mock toggle) now stored in Supabase user_settings
   const userSettings=useUserSettings(user);
   // Keep the module-level AI model in sync with the user's chosen setting
   useEffect(()=>{setActiveAIModel(userSettings.settings.aiModel);},[userSettings.settings.aiModel]);
+  // Derive the analytics site object from user settings
+  const site={id:userSettings.settings.umamiWebsiteId,name:userSettings.settings.siteName,domain:userSettings.settings.siteDomain};
+  const useMock=userSettings.settings.useMockData;
   // One-time cleanup of old localStorage entry
   useEffect(()=>{try{if(typeof localStorage!=="undefined")localStorage.removeItem("honoroll_defaults");}catch(e){}},[]);
   // Calendar entries now stored in Supabase (per user)
@@ -2456,7 +2470,7 @@ function AuthenticatedApp({user,signOut}){
     <div>
       {showSettings?(<div style={{animation:"fadeIn 0.3s ease-out"}}><SettingsPage ctxFiles={ctxFiles} brandAssets={brandAssets} defaults={userSettings.settings} onUpdateDefaults={userSettings.updateSettings}/></div>)
       :(<>
-        {tab==="analytics"&&<div style={{animation:"fadeIn 0.3s ease-out"}}><Dashboard cfg={KEYS} site={site} useMock={USE_MOCK} onSettings={handleSettings} rangeId={rangeId} onRangeChange={setRangeId} compareMode={compareMode} onCompareChange={setCompareMode} contextFiles={ctxFiles.files}/></div>}
+        {tab==="analytics"&&<div style={{animation:"fadeIn 0.3s ease-out"}}><Dashboard cfg={KEYS} site={site} useMock={useMock} onSettings={handleSettings} rangeId={rangeId} onRangeChange={setRangeId} compareMode={compareMode} onCompareChange={setCompareMode} contextFiles={ctxFiles.files}/></div>}
         {tab==="content"&&<div style={{animation:"fadeIn 0.3s ease-out"}}><ContentPage analyticsData={MOCK_DATA} contentState={contentState} setContentState={setContentState} contextFiles={ctxFiles.files} defaults={userSettings.settings} calendarEntries={calendarEntries}/></div>}
         {tab==="utm"&&<div style={{animation:"fadeIn 0.3s ease-out"}}><UtmPage utmLinks={utmLinks}/></div>}
       </>)}
