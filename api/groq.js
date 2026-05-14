@@ -1,9 +1,16 @@
+import { requireAuth } from "./_auth.js";
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
-  const { system, user, max_tokens = 4096, temperature = 0.7, model } = req.body;
-  if (!system || !user) {
+  // Require a valid Supabase JWT — proxy is not an open Groq gateway
+  const user = await requireAuth(req);
+  if (!user) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+  const { system, user: userMsg, max_tokens = 4096, temperature = 0.7, model } = req.body;
+  if (!system || !userMsg) {
     return res.status(400).json({ error: "Missing system or user message" });
   }
   if (!process.env.GROQ_API_KEY) {
@@ -18,7 +25,7 @@ export default async function handler(req, res) {
     model: chosenModel,
     messages: [
       { role: "system", content: system },
-      { role: "user", content: user },
+      { role: "user", content: userMsg },
     ],
     max_tokens,
     temperature,

@@ -1,6 +1,13 @@
+import { requireAuth } from "./_auth.js";
+
 export default async function handler(req, res) {
   if (req.method !== "GET") {
     return res.status(405).json({ error: "Method not allowed" });
+  }
+  // Require a valid Supabase JWT — proxy must not be a public Umami gateway
+  const user = await requireAuth(req);
+  if (!user) {
+    return res.status(401).json({ error: "Unauthorized" });
   }
   const { path, region } = req.query;
   if (!path) {
