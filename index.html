@@ -21,6 +21,7 @@
   <script src="https://unpkg.com/react-is@18.2.0/umd/react-is.production.min.js"></script>
   <script src="https://unpkg.com/prop-types@15.8.1/prop-types.min.js"></script>
   <script src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js"></script>
+  <script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
   <script src="https://unpkg.com/@babel/standalone@7.24.0/babel.min.js"></script>
 </head>
 <body>
@@ -41,6 +42,20 @@ const EVT=[C.accent,C.blue,C.pink,C.lime,C.purple];
 const GEO=["#D9AA5A","#C49A4E","#AF8A42","#9A7A36","#856A2A","#705A1E","#5B4A12","#463A06","#3A3000","#2E2600"];
 const font=`'DM Sans',sans-serif`;
 const mono=`'JetBrains Mono',monospace`;
+
+// ─── Supabase Configuration ──────────────────────────────────────────────────
+const SUPABASE_URL="https://zzxmpemfozerswguzoaz.supabase.co";
+const SUPABASE_ANON_KEY="sb_publishable_ls5mvx1mB_Wib4dhfxK8hQ__lpZ75w8";
+// supabaseClient is initialized lazily after CDN script loads (window.supabase global)
+let supabaseClient=null;
+const getSupabase=()=>{
+  if(supabaseClient) return supabaseClient;
+  if(typeof window!=="undefined"&&window.supabase&&window.supabase.createClient){
+    supabaseClient=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
+    return supabaseClient;
+  }
+  return null;
+};
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 const toFlag=(code)=>code?String.fromCodePoint(...[...code.toUpperCase()].map(c=>0x1F1E6-65+c.charCodeAt(0))):"";
@@ -113,8 +128,9 @@ function getCompareLabel(rangeId,compareMode) {
 }
 
 // ─── Umami API Layer ─────────────────────────────────────────────────────────
+function umamiBase(region){return`https://api.umami.is/v1${region?`/${region}`:""}`;}
 async function umamiFetch(path,apiKey,region){
-  const res=await fetch(`/api/umami?path=${encodeURIComponent(path)}${region?`&region=${region}`:""}`,{headers:{"Accept":"application/json"}});
+  const res=await fetch(`${umamiBase(region)}${path}`,{headers:{"Accept":"application/json","x-umami-api-key":apiKey}});
   if(!res.ok) throw new Error(`Umami ${path}: ${res.status}`);return res.json();
 }
 function qs(params){return Object.entries(params).filter(([,v])=>v!=null).map(([k,v])=>`${k}=${encodeURIComponent(v)}`).join("&");}
@@ -176,7 +192,7 @@ function useAnalyticsData(cfg,site,rangeId,compareMode) {
               CLS:{value:a["cumulative-layout-shift"]?.displayValue||"—",rating:a["cumulative-layout-shift"]?.score>=0.9?"good":a["cumulative-layout-shift"]?.score>=0.5?"needs-improvement":"poor"},
               TTFB:{value:a["server-response-time"]?.displayValue||"—",rating:a["server-response-time"]?.score>=0.9?"good":a["server-response-time"]?.score>=0.5?"needs-improvement":"poor"}}};}}catch(e){}
       let seoAudit=null;
-      try{const sR=await fetch(`/api/seo?domain=${encodeURIComponent(site.domain)}`);if(sR.ok)seoAudit=await sR.json();}catch(e){}
+      if(seoKey){try{const sR=await fetch(`https://seoscoreapi.com/audit?url=https://${site.domain}`,{headers:{"X-API-Key":seoKey}});if(sR.ok)seoAudit=await sR.json();}catch(e){}}
       setData({statsToday,statsYesterday,active:active.visitors||0,timeSeries:timeData,unit,
         pages:fmtM(pages),referrers:fmtM(referrers),countries:fmtM(countries).map(c=>({...c,code:c.name.length===2?c.name:""})),
         browsers:fmtM(browsers),devices:fmtM(devices),os:fmtM(os),events:fmtM(events),
@@ -265,11 +281,18 @@ Rules:
 - Return raw JSON only.`;
 
 async function callLLM(systemPrompt,userMessage,maxTokens=4096){
-  // Production: Vercel proxy (server holds the key)
-  const res=await fetch("/api/groq",{method:"POST",headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({system:systemPrompt,user:userMessage,max_tokens:maxTokens})});
+  // Try Anthropic API first (works in artifact preview on claude.ai)
+  try {
+    const aRes=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:maxTokens,system:systemPrompt,
+        messages:[{role:"user",content:userMessage}]})});
+    if(aRes.ok){const d=await aRes.json();return (d.content||[]).map(b=>b.type==="text"?b.text:"").join("").replace(/```json|```/g,"").trim();}
+  } catch(e){}
+  // Fallback to Groq (works in standalone HTML)
+  const res=await fetch("https://api.groq.com/openai/v1/chat/completions",{method:"POST",headers:{"Content-Type":"application/json","Authorization":`Bearer ${KEYS.groqKey}`},
+    body:JSON.stringify({model:"llama-3.3-70b-versatile",messages:[{role:"system",content:systemPrompt},{role:"user",content:userMessage}],max_tokens:maxTokens,temperature:0.7})});
   if(!res.ok){const e=await res.text().catch(()=>"");throw new Error(`API error ${res.status}: ${e.slice(0,200)}`);}
-  const d=await res.json();return (d.text||"").replace(/```json|```/g,"").trim();
+  const d=await res.json();return (d.choices?.[0]?.message?.content||"").replace(/```json|```/g,"").trim();
 }
 
 async function analyzeWithAI(payload,userContext){const sysPrompt=SYS_PROMPT+(userContext||"");const txt=await callLLM(sysPrompt,`Analytics data:\n\n${payload}`);
@@ -614,6 +637,8 @@ const TYPE_LABELS={post:"Post",thread:"Thread",article:"Article"};
 const StatusBadge=({status})=> <span style={{fontSize:9,fontWeight:700,fontFamily:mono,color:STATUS_COLORS[status||"draft"],textTransform:"uppercase",letterSpacing:"0.1em",padding:"2px 8px",background:`${STATUS_COLORS[status||"draft"]}15`,borderRadius:4}}>{STATUS_LABELS[status||"draft"]}</span>;
 
 // ─── Schedule Picker ─────────────────────────────────────────────────────────
+// Local-timezone YYYY-MM-DD formatter (avoid UTC drift from toISOString)
+const ymd=(d)=>{const y=d.getFullYear();const m=String(d.getMonth()+1).padStart(2,"0");const day=String(d.getDate()).padStart(2,"0");return `${y}-${m}-${day}`;};
 const SchedulePicker=({onPick,onClose,scheduledDate})=>{
   const today=new Date();const days=[];
   for(let i=0;i<14;i++){const d=new Date(today);d.setDate(d.getDate()+i);days.push(d);}
@@ -627,7 +652,7 @@ const SchedulePicker=({onPick,onClose,scheduledDate})=>{
     <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4}}>
       {dayNames.map(d=> <div key={d} style={{textAlign:"center",fontSize:8,color:C.dim,fontFamily:mono,padding:2}}>{d}</div>)}
       {Array(days[0].getDay()).fill(null).map((_,i)=> <div key={`pad-${i}`}/>)}
-      {days.map(d=>{const key=d.toISOString().split("T")[0];const isToday=d.toDateString()===today.toDateString();const isScheduled=key===scheduledDate;
+      {days.map(d=>{const key=ymd(d);const isToday=d.toDateString()===today.toDateString();const isScheduled=key===scheduledDate;
         return (<button key={key} onClick={()=>onPick(key)} style={{padding:"6px 2px",fontSize:12,fontFamily:mono,fontWeight:(isScheduled||isToday)?700:400,color:isScheduled?C.bg:isToday?C.accent:C.text,background:isScheduled?C.green:isToday?"rgba(217,170,90,0.08)":"transparent",border:`1px solid ${isScheduled?C.green:isToday?C.accentSoft:"transparent"}`,borderRadius:6,cursor:"pointer"}}>{d.getDate()}</button>);
       })}
     </div>
@@ -859,7 +884,8 @@ const CONTEXT_CATEGORIES=[
 const WORD_LIMIT=2000;
 const countWords=(text)=>(text||"").trim().split(/\s+/).filter(Boolean).length;
 
-const ContextFilesPanel=({files,onUpdate,show,onToggle,hideClose})=>{
+const ContextFilesPanel=({ctxFiles,show,onToggle,hideClose})=>{
+  const{files,loading,error,addFile,toggleActive,updateContent,deleteFile}=ctxFiles;
   const fileRef=useRef(null);
   const[mode,setMode]=useState(null);
   const[draftCategory,setDraftCategory]=useState("voice");
@@ -869,11 +895,13 @@ const ContextFilesPanel=({files,onUpdate,show,onToggle,hideClose})=>{
   const[editingFile,setEditingFile]=useState(null);
   const[editContent,setEditContent]=useState("");
   const[promptModalCategory,setPromptModalCategory]=useState(null);
+  const[saving,setSaving]=useState(false);
+  const[opError,setOpError]=useState("");
 
   const wordCount=countWords(draftContent);
   const isOverLimit=wordCount>WORD_LIMIT;
 
-  const reset=()=>{setMode(null);setDraftLabel("");setDraftContent("");setDraftCategory("voice");};
+  const reset=()=>{setMode(null);setDraftLabel("");setDraftContent("");setDraftCategory("voice");setOpError("");};
 
   const handleFileUpload=(e)=>{
     const file=e.target.files?.[0];if(!file)return;
@@ -888,17 +916,18 @@ const ContextFilesPanel=({files,onUpdate,show,onToggle,hideClose})=>{
     e.target.value="";
   };
 
-  const saveFile=()=>{
+  const saveFile=async()=>{
     if(!draftContent.trim()||!draftLabel.trim()) return;
-    const newFile={id:Date.now(),category:draftCategory,label:draftLabel.trim(),content:draftContent.trim(),active:true,createdAt:Date.now(),wordCount:countWords(draftContent)};
-    onUpdate([...files,newFile]);
-    reset();
+    setSaving(true);setOpError("");
+    try{await addFile({category:draftCategory,label:draftLabel,content:draftContent});reset();}
+    catch(e){setOpError(e.message||"Failed to save");}
+    finally{setSaving(false);}
   };
 
-  const toggleActive=(id)=>onUpdate(files.map(f=>f.id===id?{...f,active:!f.active}:f));
-  const removeFile=(id)=>{onUpdate(files.filter(f=>f.id!==id));if(expandedFile===id)setExpandedFile(null);};
+  const handleToggle=async(id)=>{try{await toggleActive(id);}catch(e){setOpError(e.message||"Failed to toggle");}};
+  const handleDelete=async(id)=>{try{await deleteFile(id);if(expandedFile===id)setExpandedFile(null);}catch(e){setOpError(e.message||"Failed to delete");}};
   const startEditing=(file)=>{setEditingFile(file.id);setEditContent(file.content);setExpandedFile(file.id);};
-  const saveEdit=(id)=>{onUpdate(files.map(f=>f.id===id?{...f,content:editContent.trim(),wordCount:countWords(editContent)}:f));setEditingFile(null);};
+  const saveEdit=async(id)=>{try{await updateContent(id,editContent);setEditingFile(null);}catch(e){setOpError(e.message||"Failed to save edit");}};
 
   const activeCount=files.filter(f=>f.active).length;
   const filesByCategory=CONTEXT_CATEGORIES.reduce((acc,cat)=>{acc[cat.id]=files.filter(f=>f.category===cat.id);return acc;},{});
@@ -911,6 +940,10 @@ const ContextFilesPanel=({files,onUpdate,show,onToggle,hideClose})=>{
       {!hideClose&&<button onClick={onToggle} style={{background:"none",border:"none",color:C.dim,cursor:"pointer",fontSize:16}}>✕</button>}
     </div>
     <div style={{fontSize:11,color:C.dim,marginBottom:16,lineHeight:1.5}}>Files inform AI generation across all tabs. Toggle each file on/off to control which context applies. Active: <span style={{color:C.green,fontFamily:mono}}>{activeCount}</span> / {files.length}</div>
+
+    {loading&&<div style={{padding:"24px",textAlign:"center",fontSize:13,color:C.muted,fontFamily:mono}}>Loading context files...</div>}
+    {error&&<div style={{padding:"12px 14px",marginBottom:16,fontSize:12,color:C.red,background:C.redSoft,border:"1px solid rgba(248,113,113,0.2)",borderRadius:8}}>Load error: {error}</div>}
+    {opError&&<div style={{padding:"10px 14px",marginBottom:16,fontSize:12,color:C.red,background:C.redSoft,border:"1px solid rgba(248,113,113,0.2)",borderRadius:8,display:"flex",justifyContent:"space-between",alignItems:"center"}}><span>{opError}</span><button onClick={()=>setOpError("")} style={{background:"none",border:"none",color:C.red,cursor:"pointer",fontSize:14}}>✕</button></div>}
 
     {/* Add new buttons */}
     {!mode&&<div style={{marginBottom:20}}>
@@ -953,7 +986,7 @@ const ContextFilesPanel=({files,onUpdate,show,onToggle,hideClose})=>{
         </div>
         <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
           <button onClick={reset} style={{fontSize:12,fontFamily:mono,color:C.muted,background:"none",border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 16px",cursor:"pointer"}}>Cancel</button>
-          <button onClick={saveFile} disabled={!draftContent.trim()||!draftLabel.trim()} style={{fontSize:13,fontFamily:font,fontWeight:600,color:C.bg,background:(!draftContent.trim()||!draftLabel.trim())?"rgba(200,205,211,0.06)":`linear-gradient(135deg,${C.accent},#E8C06A)`,border:"none",borderRadius:8,padding:"8px 20px",cursor:"pointer",opacity:(!draftContent.trim()||!draftLabel.trim())?0.4:1}}>Save</button>
+          <button onClick={saveFile} disabled={!draftContent.trim()||!draftLabel.trim()||saving} style={{fontSize:13,fontFamily:font,fontWeight:600,color:C.bg,background:(!draftContent.trim()||!draftLabel.trim()||saving)?"rgba(200,205,211,0.06)":`linear-gradient(135deg,${C.accent},#E8C06A)`,border:"none",borderRadius:8,padding:"8px 20px",cursor:"pointer",opacity:(!draftContent.trim()||!draftLabel.trim()||saving)?0.4:1}}>{saving?"Saving...":"Save"}</button>
         </div>
       </div>
     </div>}
@@ -972,7 +1005,7 @@ const ContextFilesPanel=({files,onUpdate,show,onToggle,hideClose})=>{
           <div style={{display:"flex",flexDirection:"column",gap:6}}>{catFiles.map(file=>(<div key={file.id} style={{background:"rgba(200,205,211,0.02)",border:`1px solid ${file.active?cat.color+"30":C.border}`,borderRadius:8,padding:"10px 14px",opacity:file.active?1:0.55,transition:"all 0.15s"}}>
             <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
               {/* Toggle */}
-              <button onClick={()=>toggleActive(file.id)} title={file.active?"Active (click to disable)":"Inactive (click to enable)"} style={{width:32,height:18,borderRadius:9,background:file.active?cat.color:"rgba(200,205,211,0.1)",border:"none",cursor:"pointer",position:"relative",padding:0,transition:"all 0.2s",flexShrink:0}}>
+              <button onClick={()=>handleToggle(file.id)} title={file.active?"Active (click to disable)":"Inactive (click to enable)"} style={{width:32,height:18,borderRadius:9,background:file.active?cat.color:"rgba(200,205,211,0.1)",border:"none",cursor:"pointer",position:"relative",padding:0,transition:"all 0.2s",flexShrink:0}}>
                 <div style={{width:14,height:14,borderRadius:"50%",background:"#fff",position:"absolute",top:2,left:file.active?16:2,transition:"left 0.2s"}}/>
               </button>
               <div style={{flex:1,minWidth:160}}>
@@ -981,7 +1014,7 @@ const ContextFilesPanel=({files,onUpdate,show,onToggle,hideClose})=>{
               </div>
               <button onClick={()=>setExpandedFile(expandedFile===file.id?null:file.id)} style={{fontSize:11,fontFamily:mono,color:C.muted,background:"none",border:`1px solid ${C.border}`,borderRadius:6,padding:"4px 10px",cursor:"pointer"}}>{expandedFile===file.id?"Hide":"View"}</button>
               <button onClick={()=>editingFile===file.id?saveEdit(file.id):startEditing(file)} style={{fontSize:11,fontFamily:mono,color:editingFile===file.id?C.accent:C.muted,background:"none",border:`1px solid ${editingFile===file.id?C.accent:C.border}`,borderRadius:6,padding:"4px 10px",cursor:"pointer"}}>{editingFile===file.id?"Save":"Edit"}</button>
-              <button onClick={()=>removeFile(file.id)} style={{fontSize:11,fontFamily:mono,color:C.red,background:"none",border:`1px solid rgba(248,113,113,0.2)`,borderRadius:6,padding:"4px 10px",cursor:"pointer"}}>✕</button>
+              <button onClick={()=>handleDelete(file.id)} style={{fontSize:11,fontFamily:mono,color:C.red,background:"none",border:`1px solid rgba(248,113,113,0.2)`,borderRadius:6,padding:"4px 10px",cursor:"pointer"}}>✕</button>
             </div>
             {/* Expanded content */}
             {expandedFile===file.id&&<div style={{marginTop:10,paddingTop:10,borderTop:`1px solid ${C.border}`,animation:"fadeIn 0.2s ease-out"}}>
@@ -1013,40 +1046,52 @@ const buildContextString=(files)=>{
 };
 
 // ─── Brand Assets Panel ──────────────────────────────────────────────────────
-const BrandAssetsPanel=({assets,onUpdate,show,onToggle,hideClose})=>{
+const BrandAssetsPanel=({brandAssets,show,onToggle,hideClose})=>{
+  const{assets,loading,error,addAsset,updateDescription,removeAsset}=brandAssets;
   const fileRef=useRef(null);
-  const addAsset=(e)=>{
-    const file=e.target.files?.[0];if(!file)return;
-    const reader=new FileReader();
-    reader.onload=(ev)=>{
-      const newAsset={id:Date.now(),name:file.name,dataUrl:ev.target.result,description:""};
-      onUpdate([...assets,newAsset]);
-    };
-    reader.readAsDataURL(file);
-    e.target.value="";
+  const[uploading,setUploading]=useState(false);
+  const[opError,setOpError]=useState("");
+  const handleFileUpload=async(e)=>{
+    const file=e.target.files?.[0];e.target.value="";
+    if(!file)return;
+    setUploading(true);setOpError("");
+    try{await addAsset(file,"");}
+    catch(ex){setOpError(ex.message||"Upload failed");}
+    finally{setUploading(false);}
   };
-  const removeAsset=(id)=>onUpdate(assets.filter(a=>a.id!==id));
-  const updateDesc=(id,desc)=>onUpdate(assets.map(a=>a.id===id?{...a,description:desc}:a));
+  const handleRemove=async(id)=>{
+    try{await removeAsset(id);}
+    catch(ex){setOpError(ex.message||"Remove failed");}
+  };
+  // Debounced description updates so typing doesn't fire one Supabase call per keystroke
+  const descTimersRef=useRef({});
+  const handleDescChange=(id,desc)=>{
+    if(descTimersRef.current[id])clearTimeout(descTimersRef.current[id]);
+    descTimersRef.current[id]=setTimeout(()=>{updateDescription(id,desc).catch(ex=>setOpError(ex.message||"Save description failed"));},500);
+  };
 
   if(!show) return null;
   return (<div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"20px 22px",marginBottom:24,animation:"fadeIn 0.3s ease-out"}}>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
       <div style={{fontSize:12,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em"}}>Brand Assets</div>
       <div style={{display:"flex",gap:8}}>
-        <button onClick={()=>fileRef.current?.click()} style={{fontSize:11,fontFamily:font,color:C.bg,background:C.accent,border:"none",borderRadius:6,padding:"5px 14px",cursor:"pointer",fontWeight:600}}>+ Upload</button>
+        <button onClick={()=>!uploading&&fileRef.current?.click()} disabled={uploading} style={{fontSize:11,fontFamily:font,color:C.bg,background:C.accent,border:"none",borderRadius:6,padding:"5px 14px",cursor:uploading?"wait":"pointer",fontWeight:600,opacity:uploading?0.6:1}}>{uploading?"Uploading...":"+ Upload"}</button>
         {!hideClose&&<button onClick={onToggle} style={{background:"none",border:"none",color:C.dim,cursor:"pointer",fontSize:14}}>✕</button>}
       </div>
     </div>
-    <input ref={fileRef} type="file" accept="image/*" onChange={addAsset} style={{display:"none"}}/>
+    <input ref={fileRef} type="file" accept="image/*" onChange={handleFileUpload} style={{display:"none"}}/>
     <div style={{fontSize:11,color:C.dim,marginBottom:14,lineHeight:1.5}}>Upload logos, brand marks, color palettes, and style references. These inform AI artwork generation.</div>
-    {assets.length===0&&<div style={{padding:"20px",textAlign:"center",border:`1px dashed ${C.border}`,borderRadius:8,color:C.dim,fontSize:12}}>No assets uploaded yet</div>}
+    {error&&<div style={{padding:"10px 12px",marginBottom:12,fontSize:11,color:C.red,background:C.redSoft,border:"1px solid rgba(248,113,113,0.2)",borderRadius:6}}>Load error: {error}</div>}
+    {opError&&<div style={{padding:"10px 12px",marginBottom:12,fontSize:11,color:C.red,background:C.redSoft,border:"1px solid rgba(248,113,113,0.2)",borderRadius:6,display:"flex",justifyContent:"space-between",alignItems:"center"}}><span>{opError}</span><button onClick={()=>setOpError("")} style={{background:"none",border:"none",color:C.red,cursor:"pointer",fontSize:14}}>✕</button></div>}
+    {loading&&<div style={{padding:"20px",textAlign:"center",fontSize:12,color:C.muted,fontFamily:mono}}>Loading brand assets...</div>}
+    {!loading&&assets.length===0&&<div style={{padding:"20px",textAlign:"center",border:`1px dashed ${C.border}`,borderRadius:8,color:C.dim,fontSize:12}}>No assets uploaded yet</div>}
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(140px, 1fr))",gap:10}}>
       {assets.map(a=> (<div key={a.id} style={{background:"rgba(200,205,211,0.03)",borderRadius:8,overflow:"hidden",border:`1px solid ${C.border}`}}>
-        <img src={a.dataUrl} alt={a.name} style={{width:"100%",height:80,objectFit:"cover",display:"block"}}/>
+        {a.displayUrl?<img src={a.displayUrl} alt={a.name} style={{width:"100%",height:80,objectFit:"cover",display:"block"}}/>:<div style={{width:"100%",height:80,background:"rgba(200,205,211,0.04)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,color:C.dim}}>preview unavailable</div>}
         <div style={{padding:"8px"}}>
-          <input value={a.description} onChange={e=>updateDesc(a.id,e.target.value)} placeholder="Describe this asset..."
+          <input defaultValue={a.description} onChange={e=>handleDescChange(a.id,e.target.value)} placeholder="Describe this asset..."
             style={{width:"100%",background:"transparent",border:"none",borderBottom:`1px solid ${C.border}`,fontSize:10,fontFamily:font,color:C.text,outline:"none",padding:"2px 0",marginBottom:4,boxSizing:"border-box"}}/>
-          <button onClick={()=>removeAsset(a.id)} style={{fontSize:9,color:C.red,background:"none",border:"none",cursor:"pointer"}}>Remove</button>
+          <button onClick={()=>handleRemove(a.id)} style={{fontSize:9,color:C.red,background:"none",border:"none",cursor:"pointer"}}>Remove</button>
         </div>
       </div>))}
     </div>
@@ -1054,7 +1099,7 @@ const BrandAssetsPanel=({assets,onUpdate,show,onToggle,hideClose})=>{
 };
 
 // ─── Content Calendar (Enhanced with Preview) ────────────────────────────────
-const ContentCalendar=({history,onUpdateEntry,onDeleteEntry})=>{
+const ContentCalendar=({history,onUpdateEntry,onDeleteEntry,onUploadImage})=>{
   const[view,setView]=useState("week");
   const[preview,setPreview]=useState(null);
   const today=new Date();const dayNames=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
@@ -1088,7 +1133,7 @@ const ContentCalendar=({history,onUpdateEntry,onDeleteEntry})=>{
       }
     </div>
     <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4}}>
-      {days.map((d,i)=>{if(!d) return <div key={`e-${i}`}/>;const key=d.toISOString().split("T")[0];const items=history.filter(h=>h.date===key);const isToday=key===today.toISOString().split("T")[0];
+      {days.map((d,i)=>{if(!d) return <div key={`e-${i}`}/>;const key=ymd(d);const items=history.filter(h=>h.date===key);const isToday=key===ymd(today);
         return (<div key={key} onClick={()=>items.length>0&&setPreview(preview===key?null:key)} style={{textAlign:"center",padding:view==="week"?"12px 4px":"8px 4px",borderRadius:8,cursor:items.length?"pointer":"default",background:isToday?"rgba(217,170,90,0.06)":"transparent",border:isToday?`1px solid ${C.accentSoft}`:`1px solid transparent`,transition:"all 0.15s",minHeight:view==="week"?70:40}}>
           <div style={{fontSize:view==="week"?14:12,fontWeight:600,color:isToday?C.accent:C.muted,fontFamily:mono}}>{d.getDate()}</div>
           <div style={{display:"flex",justifyContent:"center",gap:3,marginTop:4,flexWrap:"wrap"}}>{items.map((it,j)=> <div key={j} style={{width:8,height:8,borderRadius:"50%",background:TYPE_COLORS[it.type],border:it.status==="published"?`2px solid ${C.green}`:it.status==="scheduled"?`2px solid ${C.accent}`:"2px solid transparent",boxSizing:"border-box"}}/>)}</div>
@@ -1110,9 +1155,9 @@ const ContentCalendar=({history,onUpdateEntry,onDeleteEntry})=>{
           <div style={{fontSize:14,color:C.text,lineHeight:1.6,whiteSpace:"pre-wrap"}}>{entry.fullText||entry.preview}</div>
           {entry.image&&<div style={{marginTop:12,borderRadius:8,overflow:"hidden",border:`1px solid ${C.border}`,position:"relative"}}>
             <img src={entry.image} alt="" style={{width:"100%",aspectRatio:"16/9",objectFit:"cover",display:"block"}}/>
-            <button onClick={()=>onUpdateEntry({...entry,image:null})} title="Remove image" style={{position:"absolute",top:8,right:8,width:28,height:28,borderRadius:"50%",background:"rgba(11,14,17,0.85)",border:`1px solid ${C.border}`,color:C.red,cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
+            <button onClick={()=>onUpdateEntry({...entry,image:null,imagePath:null})} title="Remove image" style={{position:"absolute",top:8,right:8,width:28,height:28,borderRadius:"50%",background:"rgba(11,14,17,0.85)",border:`1px solid ${C.border}`,color:C.red,cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
           </div>}
-          {!entry.image&&<CalendarImageUpload entry={entry} onUpdateEntry={onUpdateEntry}/>}
+          {!entry.image&&<CalendarImageUpload entry={entry} onUpdateEntry={onUpdateEntry} onUploadImage={onUploadImage}/>}
         </div>
         {/* Export actions */}
         <div style={{padding:"10px 18px",display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
@@ -1126,12 +1171,24 @@ const ContentCalendar=({history,onUpdateEntry,onDeleteEntry})=>{
   </div>);
 };
 
-const CalendarImageUpload=({entry,onUpdateEntry})=>{
+const CalendarImageUpload=({entry,onUpdateEntry,onUploadImage})=>{
   const ref=useRef(null);
-  const handle=(e)=>{const f=e.target.files?.[0];if(!f)return;const r=new FileReader();r.onload=(ev)=>onUpdateEntry({...entry,image:ev.target.result});r.readAsDataURL(f);e.target.value="";};
+  const[uploading,setUploading]=useState(false);
+  const[err,setErr]=useState("");
+  const handle=async(e)=>{
+    const f=e.target.files?.[0];e.target.value="";
+    if(!f||!onUploadImage)return;
+    setUploading(true);setErr("");
+    try{
+      const{path,signedUrl}=await onUploadImage(f);
+      onUpdateEntry({...entry,image:signedUrl,imagePath:path});
+    }catch(ex){setErr(ex.message||"Upload failed");}
+    finally{setUploading(false);}
+  };
   return (<>
-    <button onClick={()=>ref.current?.click()} style={{marginTop:12,width:"100%",padding:"10px",fontSize:11,fontFamily:font,color:C.muted,background:"rgba(200,205,211,0.03)",border:`1px dashed ${C.border}`,borderRadius:8,cursor:"pointer"}}>📁 Add image to this post</button>
+    <button onClick={()=>!uploading&&ref.current?.click()} disabled={uploading} style={{marginTop:12,width:"100%",padding:"10px",fontSize:11,fontFamily:font,color:C.muted,background:"rgba(200,205,211,0.03)",border:`1px dashed ${C.border}`,borderRadius:8,cursor:uploading?"wait":"pointer",opacity:uploading?0.6:1}}>{uploading?"Uploading...":"📁 Add image to this post"}</button>
     <input ref={ref} type="file" accept="image/*" onChange={handle} style={{display:"none"}}/>
+    {err&&<div style={{marginTop:6,fontSize:10,color:C.red}}>{err}</div>}
   </>);
 };
 
@@ -1267,28 +1324,27 @@ const ArticleCard=({article,onUpdateBody,onUpdateHeadline,onSchedule,scheduledDa
 };
 
 // ─── Content Page ────────────────────────────────────────────────────────────
-const ContentPage=({analyticsData,contentState,setContentState,brandAssets,onUpdateAssets,contextFiles,onUpdateContextFiles,defaults})=>{
+const ContentPage=({analyticsData,contentState,setContentState,contextFiles,defaults,calendarEntries})=>{
   const ctx=buildMarketingContext(analyticsData);
   const[tone,setTone]=useState(contentState.tone||defaults?.tone||"founder");
-  const{posts,thread,article,calendar}=contentState;
+  const{posts,thread,article}=contentState;
+  const{entries:calendar,loading:calendarLoading,error:calendarError,addEntry,scheduleEntry,updateEntry,deleteEntry,uploadCalendarImage}=calendarEntries;
   const setPosts=(p)=>setContentState(s=>({...s,posts:p}));
   const setThread=(t)=>setContentState(s=>({...s,thread:t}));
   const setArticle=(a)=>setContentState(s=>({...s,article:a}));
-  const addCalendar=(type,preview,fullText,image)=>{const entry={type,preview:preview.slice(0,60),fullText:fullText||preview,image:image||null,date:new Date().toISOString().split("T")[0],status:"draft",id:Date.now()};setContentState(s=>({...s,calendar:[...s.calendar,entry]}));return entry.id;};
-  const scheduleToDate=(type,preview,fullText,date,image)=>{
-    setContentState(s=>{
-      // Remove any existing scheduled entry that matches this content (reschedule case)
-      const filtered=s.calendar.filter(e=>!(e.status==="scheduled"&&e.type===type&&(e.fullText===fullText||e.preview===preview.slice(0,60))));
-      const entry={type,preview:preview.slice(0,60),fullText:fullText||preview,image:image||null,date,status:"scheduled",id:Date.now()};
-      return {...s,calendar:[...filtered,entry]};
-    });
+  // Calendar operations now hit Supabase (async, fire-and-forget for snappy UI)
+  const addCalendar=(type,preview,fullText)=>{
+    addEntry({type,preview,fullText,imagePath:null,date:ymd(new Date()),status:"draft"}).catch(e=>console.error("addCalendar failed",e));
+  };
+  const scheduleToDate=(type,preview,fullText,date)=>{
+    scheduleEntry({type,preview,fullText,date,imagePath:null}).catch(e=>console.error("scheduleToDate failed",e));
   };
   const findScheduledDate=(type,fullText)=>{
     const entry=calendar.find(e=>e.status==="scheduled"&&e.type===type&&e.fullText===fullText);
     return entry?.date||null;
   };
-  const updateCalendarEntry=(updated)=>setContentState(s=>({...s,calendar:s.calendar.map(e=>e.id===updated.id?updated:e)}));
-  const deleteCalendarEntry=(id)=>setContentState(s=>({...s,calendar:s.calendar.filter(e=>e.id!==id)}));
+  const updateCalendarEntry=(updated)=>{updateEntry(updated).catch(e=>console.error("updateCalendarEntry failed",e));};
+  const deleteCalendarEntry=(id)=>{deleteEntry(id).catch(e=>console.error("deleteCalendarEntry failed",e));};
   const updatePost=(idx,newText)=>{const updated=[...posts];updated[idx]={...updated[idx],text:newText,chars:newText.length};setPosts(updated);};
   const updateThreadTweet=(idx,newText)=>{const updated=[...thread];updated[idx]={...updated[idx],tweet:newText,chars:newText.length};setThread(updated);};
   const updateArticleBody=(newBody)=>setArticle({...article,body:newBody});
@@ -1313,7 +1369,7 @@ const ContentPage=({analyticsData,contentState,setContentState,brandAssets,onUpd
   return (<div style={{maxWidth:1280,margin:"0 auto",padding:"24px 20px"}}>
     {/* Header */}
     <Heading desc="Track content, schedule posts, preview before publishing.">Content Calendar</Heading>
-    <ContentCalendar history={calendar} onUpdateEntry={updateCalendarEntry} onDeleteEntry={deleteCalendarEntry}/>
+    <ContentCalendar history={calendar} onUpdateEntry={updateCalendarEntry} onDeleteEntry={deleteCalendarEntry} onUploadImage={uploadCalendarImage}/>
 
     {/* Queue */}
     <Heading desc="Upcoming scheduled content and recent drafts.">Content Queue</Heading>
@@ -1443,7 +1499,8 @@ const UtmHistoryItem=({item,onDelete})=>{
   </div>);
 };
 
-const UtmPage=({utmHistory,onUpdateHistory})=>{
+const UtmPage=({utmLinks})=>{
+  const{links:utmHistory,loading,error,addLink,deleteLink}=utmLinks;
   const[destUrl,setDestUrl]=useState("");
   const[source,setSource]=useState("");
   const[medium,setMedium]=useState("");
@@ -1452,27 +1509,32 @@ const UtmPage=({utmHistory,onUpdateHistory})=>{
   const[justSaved,setJustSaved]=useState(false);
   const[search,setSearch]=useState("");
   const[filterSource,setFilterSource]=useState("");
+  const[saving,setSaving]=useState(false);
+  const[opError,setOpError]=useState("");
 
   const liveUrl=buildUtmUrl(destUrl,source,medium,campaign);
   const isComplete=destUrl&&source&&medium&&campaign;
 
   const applyTemplate=(tpl)=>{setSource(tpl.source);setMedium(tpl.medium);};
 
-  const save=()=>{
-    if(!isComplete) return;
+  const save=async()=>{
+    if(!isComplete||saving) return;
+    setSaving(true);setOpError("");
     const autoLabel=`${source} / ${medium} / ${campaign}`;
-    const entry={id:Date.now(),url:liveUrl,destUrl,source,medium,campaign,label:customLabel||autoLabel,createdAt:Date.now()};
-    onUpdateHistory([entry,...utmHistory]);
-    // Copy to clipboard
     try{
-      if(navigator.clipboard?.writeText) navigator.clipboard.writeText(liveUrl);
-      else{const ta=document.createElement("textarea");ta.value=liveUrl;ta.style.cssText="position:fixed;left:-9999px";document.body.appendChild(ta);ta.select();document.execCommand("copy");document.body.removeChild(ta);}
-    }catch(e){}
-    setJustSaved(true);
-    setTimeout(()=>{setDestUrl("");setSource("");setMedium("");setCampaign("");setCustomLabel("");setJustSaved(false);},1500);
+      await addLink({destUrl,source,medium,campaign,label:customLabel||autoLabel,fullUrl:liveUrl});
+      // Copy to clipboard
+      try{
+        if(navigator.clipboard?.writeText) navigator.clipboard.writeText(liveUrl);
+        else{const ta=document.createElement("textarea");ta.value=liveUrl;ta.style.cssText="position:fixed;left:-9999px";document.body.appendChild(ta);ta.select();document.execCommand("copy");document.body.removeChild(ta);}
+      }catch(e){}
+      setJustSaved(true);
+      setTimeout(()=>{setDestUrl("");setSource("");setMedium("");setCampaign("");setCustomLabel("");setJustSaved(false);},1500);
+    }catch(e){setOpError(e.message||"Failed to save");}
+    finally{setSaving(false);}
   };
 
-  const deleteEntry=(id)=>onUpdateHistory(utmHistory.filter(h=>h.id!==id));
+  const deleteEntry=async(id)=>{try{await deleteLink(id);}catch(e){setOpError(e.message||"Failed to delete");}};
 
   const filtered=utmHistory.filter(h=>{
     const q=search.toLowerCase();
@@ -1534,8 +1596,8 @@ const UtmPage=({utmHistory,onUpdateHistory})=>{
 
         {/* Generate button */}
         <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
-          <button onClick={save} disabled={!isComplete} style={{padding:"12px 28px",fontSize:14,fontWeight:600,fontFamily:font,color:isComplete?C.bg:C.muted,background:justSaved?C.green:isComplete?`linear-gradient(135deg,${C.accent},#E8C06A)`:"rgba(200,205,211,0.06)",border:"none",borderRadius:10,cursor:isComplete?"pointer":"not-allowed",transition:"all 0.2s",opacity:isComplete?1:0.5}}>
-            {justSaved?"✓ Saved & Copied":"Generate & Save"}
+          <button onClick={save} disabled={!isComplete||saving} style={{padding:"12px 28px",fontSize:14,fontWeight:600,fontFamily:font,color:isComplete&&!saving?C.bg:C.muted,background:justSaved?C.green:isComplete&&!saving?`linear-gradient(135deg,${C.accent},#E8C06A)`:"rgba(200,205,211,0.06)",border:"none",borderRadius:10,cursor:isComplete&&!saving?"pointer":"not-allowed",transition:"all 0.2s",opacity:isComplete&&!saving?1:0.5}}>
+            {justSaved?"✓ Saved & Copied":saving?"Saving...":"Generate & Save"}
           </button>
         </div>
       </div>
@@ -1554,7 +1616,10 @@ const UtmPage=({utmHistory,onUpdateHistory})=>{
         </select>
       </div>}
     </div>
-    {utmHistory.length===0?(<div style={{background:C.surface,border:`1px dashed ${C.border}`,borderRadius:12,padding:"40px 24px",textAlign:"center"}}>
+    {opError&&<div style={{padding:"10px 14px",marginBottom:16,fontSize:12,color:C.red,background:C.redSoft,border:"1px solid rgba(248,113,113,0.2)",borderRadius:8,display:"flex",justifyContent:"space-between",alignItems:"center"}}><span>{opError}</span><button onClick={()=>setOpError("")} style={{background:"none",border:"none",color:C.red,cursor:"pointer",fontSize:14}}>✕</button></div>}
+    {error&&<div style={{padding:"12px 14px",marginBottom:16,fontSize:12,color:C.red,background:C.redSoft,border:"1px solid rgba(248,113,113,0.2)",borderRadius:8}}>Load error: {error}</div>}
+    {loading?(<div style={{padding:"40px 24px",textAlign:"center",fontSize:13,color:C.muted,fontFamily:mono}}>Loading UTM links...</div>):
+    utmHistory.length===0?(<div style={{background:C.surface,border:`1px dashed ${C.border}`,borderRadius:12,padding:"40px 24px",textAlign:"center"}}>
       <div style={{fontSize:32,marginBottom:12,opacity:0.4}}>🔗</div>
       <div style={{fontSize:14,color:C.muted,marginBottom:6}}>No links yet</div>
       <div style={{fontSize:12,color:C.dim}}>Build your first UTM link above</div>
@@ -1569,8 +1634,10 @@ const UtmPage=({utmHistory,onUpdateHistory})=>{
 };
 
 // ─── Header (Logo + Tabs + Settings + Avatar) ────────────────────────────────
-const Header=({active,onChange,onSettings,settingsActive})=>{
+const Header=({active,onChange,onSettings,settingsActive,user,onSignOut})=>{
   const TABS=[{id:"analytics",label:"Analytics"},{id:"content",label:"Content"},{id:"utm",label:"UTM Links"}];
+  const[menuOpen,setMenuOpen]=useState(false);
+  const initial=(user?.email||"?").charAt(0).toUpperCase();
   return (<div style={{background:"rgba(10,12,15,0.6)",backdropFilter:"blur(8px)",borderBottom:`1px solid ${C.border}`,position:"sticky",top:0,zIndex:40}}>
     <div style={{maxWidth:1280,margin:"0 auto",padding:"14px 20px",display:"flex",alignItems:"center",gap:24,flexWrap:"wrap"}}>
       {/* Logo */}
@@ -1581,6 +1648,20 @@ const Header=({active,onChange,onSettings,settingsActive})=>{
       {/* Tabs */}
       <div style={{display:"flex",gap:6,flex:1,flexWrap:"wrap"}}>
         {TABS.map(tab=> (<button key={tab.id} onClick={()=>onChange(tab.id)} style={{padding:"9px 22px",fontSize:13,fontWeight:600,fontFamily:font,color:active===tab.id&&!settingsActive?C.bg:C.muted,cursor:"pointer",transition:"all 0.2s",background:active===tab.id&&!settingsActive?`linear-gradient(135deg,${C.accent},#E8C06A)`:"rgba(200,205,211,0.04)",border:active===tab.id&&!settingsActive?"none":`1px solid ${C.border}`,borderRadius:8,letterSpacing:"0.02em"}}>{tab.label}</button>))}
+      </div>
+      {/* User menu */}
+      <div style={{position:"relative",flexShrink:0}}>
+        <button onClick={()=>setMenuOpen(!menuOpen)} title={user?.email||""} style={{width:36,height:36,borderRadius:"50%",background:menuOpen?C.accentSoft:"rgba(200,205,211,0.06)",border:`1px solid ${menuOpen?C.accent:C.border}`,color:menuOpen?C.accent:C.muted,cursor:"pointer",fontSize:13,fontWeight:600,fontFamily:mono,display:"flex",alignItems:"center",justifyContent:"center",transition:"all 0.15s"}}>{initial}</button>
+        {menuOpen&&(<>
+          <div onClick={()=>setMenuOpen(false)} style={{position:"fixed",inset:0,zIndex:39}}/>
+          <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,zIndex:40,background:"#1A1F25",border:`1px solid ${C.border}`,borderRadius:10,padding:4,minWidth:240,boxShadow:"0 8px 24px rgba(0,0,0,0.4)",animation:"fadeIn 0.15s ease-out"}}>
+            <div style={{padding:"10px 12px",borderBottom:`1px solid ${C.border}`,marginBottom:4}}>
+              <div style={{fontSize:10,color:C.dim,textTransform:"uppercase",fontFamily:mono,letterSpacing:"0.06em",marginBottom:3}}>Signed in as</div>
+              <div style={{fontSize:13,color:C.bright,fontFamily:mono,wordBreak:"break-all"}}>{user?.email||""}</div>
+            </div>
+            <button onClick={()=>{setMenuOpen(false);onSignOut();}} style={{display:"block",width:"100%",textAlign:"left",padding:"10px 12px",fontSize:13,fontFamily:font,color:C.red,background:"transparent",border:"none",borderRadius:6,cursor:"pointer"}}>Sign out</button>
+          </div>
+        </>)}
       </div>
       {/* Settings */}
       <button onClick={onSettings} title="Settings" style={{width:36,height:36,borderRadius:8,background:settingsActive?C.accentSoft:"rgba(200,205,211,0.04)",border:`1px solid ${settingsActive?C.accent:C.border}`,color:settingsActive?C.accent:C.muted,cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center",transition:"all 0.15s",flexShrink:0}}>⚙</button>
@@ -1597,7 +1678,7 @@ const SETTINGS_SECTIONS=[
   {id:"defaults",label:"Defaults",desc:"Default tone, length, generation settings"},
 ];
 
-const SettingsPage=({contextFiles,onUpdateContextFiles,brandAssets,onUpdateAssets,defaults,onUpdateDefaults})=>{
+const SettingsPage=({ctxFiles,brandAssets,defaults,onUpdateDefaults})=>{
   const[section,setSection]=useState("context");
   const[showContext,setShowContext]=useState(true);
   const[showAssets,setShowAssets]=useState(true);
@@ -1618,11 +1699,11 @@ const SettingsPage=({contextFiles,onUpdateContextFiles,brandAssets,onUpdateAsset
       <div style={{minWidth:0}}>
         {section==="context"&&(<div>
           <Heading desc="Files informing AI generation across Analytics insights and content drafts. Toggle each on/off to control what's active.">Context Files</Heading>
-          <ContextFilesPanel files={contextFiles} onUpdate={onUpdateContextFiles} show={true} onToggle={()=>{}} hideClose={true}/>
+          <ContextFilesPanel ctxFiles={ctxFiles} show={true} onToggle={()=>{}} hideClose={true}/>
         </div>)}
         {section==="brand"&&(<div>
           <Heading desc="Upload logos, brand marks, and visual references. Descriptions inform AI artwork generation.">Brand Assets</Heading>
-          <BrandAssetsPanel assets={brandAssets} onUpdate={onUpdateAssets} show={true} onToggle={()=>{}} hideClose={true}/>
+          <BrandAssetsPanel brandAssets={brandAssets} show={true} onToggle={()=>{}} hideClose={true}/>
         </div>)}
         {section==="integrations"&&(<div>
           <Heading desc="Connected services and API keys.">Integrations</Heading>
@@ -1671,19 +1752,19 @@ const SettingsPage=({contextFiles,onUpdateContextFiles,brandAssets,onUpdateAsset
             <div style={{display:"grid",gap:18}}>
               <div>
                 <label style={{display:"block",fontSize:11,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Default tone</label>
-                <ToneSelector value={defaults.tone} onChange={t=>onUpdateDefaults({...defaults,tone:t})}/>
+                <ToneSelector value={defaults.tone} onChange={t=>onUpdateDefaults({tone:t})}/>
               </div>
               <div>
                 <label style={{display:"block",fontSize:11,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Default post length</label>
-                <LengthPicker value={defaults.postLength} onChange={l=>onUpdateDefaults({...defaults,postLength:l})}/>
+                <LengthPicker value={defaults.postLength} onChange={l=>onUpdateDefaults({postLength:l})}/>
               </div>
               <div>
                 <label style={{display:"block",fontSize:11,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Default thread length</label>
-                <LengthPicker value={defaults.threadLength} onChange={l=>onUpdateDefaults({...defaults,threadLength:l})}/>
+                <LengthPicker value={defaults.threadLength} onChange={l=>onUpdateDefaults({threadLength:l})}/>
               </div>
               <div>
                 <label style={{display:"block",fontSize:11,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Default article length</label>
-                <LengthPicker value={defaults.articleLength} onChange={l=>onUpdateDefaults({...defaults,articleLength:l})}/>
+                <LengthPicker value={defaults.articleLength} onChange={l=>onUpdateDefaults({articleLength:l})}/>
               </div>
             </div>
           </div>
@@ -1696,9 +1777,502 @@ const SettingsPage=({contextFiles,onUpdateContextFiles,brandAssets,onUpdateAsset
 };
 
 // ─── Tab Navigation ──────────────────────────────────────────────────────────
+// ─── Data: useContextFiles hook (Supabase) ──────────────────────────────────
+// Maps Supabase row (snake_case) to React shape (camelCase) used everywhere else
+const rowToContextFile=(r)=>({id:r.id,category:r.category,label:r.label,content:r.content,active:r.active,wordCount:r.word_count,createdAt:r.created_at?new Date(r.created_at).getTime():Date.now()});
+
+const useContextFiles=(user)=>{
+  const[files,setFiles]=useState([]);
+  const[loading,setLoading]=useState(true);
+  const[error,setError]=useState("");
+
+  // Initial load on user change
+  useEffect(()=>{
+    if(!user){setFiles([]);setLoading(false);return;}
+    const sb=getSupabase();
+    if(!sb){setError("Supabase not ready");setLoading(false);return;}
+    let cancelled=false;
+    (async()=>{
+      setLoading(true);setError("");
+      try{
+        const{data,error:e}=await sb.from("context_files").select("*").order("created_at",{ascending:true});
+        if(cancelled)return;
+        if(e)throw e;
+        setFiles((data||[]).map(rowToContextFile));
+      }catch(e){if(!cancelled)setError(e.message||"Failed to load context files");}
+      finally{if(!cancelled)setLoading(false);}
+    })();
+    return()=>{cancelled=true;};
+  },[user?.id]);
+
+  // Add a new file
+  const addFile=async({category,label,content})=>{
+    const sb=getSupabase();if(!sb)throw new Error("Supabase not ready");
+    const wordCount=countWords(content);
+    const{data,error:e}=await sb.from("context_files").insert({user_id:user.id,category,label:label.trim(),content:content.trim(),active:true,word_count:wordCount}).select().single();
+    if(e)throw e;
+    setFiles(f=>[...f,rowToContextFile(data)]);
+    return data;
+  };
+
+  // Toggle active flag
+  const toggleActive=async(id)=>{
+    const sb=getSupabase();if(!sb)throw new Error("Supabase not ready");
+    const cur=files.find(f=>f.id===id);if(!cur)return;
+    const{data,error:e}=await sb.from("context_files").update({active:!cur.active}).eq("id",id).select().single();
+    if(e)throw e;
+    setFiles(f=>f.map(x=>x.id===id?rowToContextFile(data):x));
+  };
+
+  // Update file content
+  const updateContent=async(id,content)=>{
+    const sb=getSupabase();if(!sb)throw new Error("Supabase not ready");
+    const wordCount=countWords(content);
+    const{data,error:e}=await sb.from("context_files").update({content:content.trim(),word_count:wordCount}).eq("id",id).select().single();
+    if(e)throw e;
+    setFiles(f=>f.map(x=>x.id===id?rowToContextFile(data):x));
+  };
+
+  // Delete file
+  const deleteFile=async(id)=>{
+    const sb=getSupabase();if(!sb)throw new Error("Supabase not ready");
+    const{error:e}=await sb.from("context_files").delete().eq("id",id);
+    if(e)throw e;
+    setFiles(f=>f.filter(x=>x.id!==id));
+  };
+
+  return {files,loading,error,addFile,toggleActive,updateContent,deleteFile};
+};
+
+// ─── Data: useUserSettings hook (Supabase) ────────────────────────────────────
+// Single row per user (auto-created by trigger on signup). Uses upsert defensively.
+const DEFAULT_SETTINGS={tone:"founder",postLength:"normal",threadLength:"normal",articleLength:"normal"};
+const rowToSettings=(r)=>({tone:r.tone||"founder",postLength:r.post_length||"normal",threadLength:r.thread_length||"normal",articleLength:r.article_length||"normal"});
+const settingsToRow=(s,userId)=>({user_id:userId,tone:s.tone,post_length:s.postLength,thread_length:s.threadLength,article_length:s.articleLength});
+
+const useUserSettings=(user)=>{
+  const[settings,setSettings]=useState(DEFAULT_SETTINGS);
+  const[loading,setLoading]=useState(true);
+  const[error,setError]=useState("");
+
+  // Initial load
+  useEffect(()=>{
+    if(!user){setSettings(DEFAULT_SETTINGS);setLoading(false);return;}
+    const sb=getSupabase();if(!sb){setError("Supabase not ready");setLoading(false);return;}
+    let cancelled=false;
+    (async()=>{
+      setLoading(true);setError("");
+      try{
+        const{data,error:e}=await sb.from("user_settings").select("*").eq("user_id",user.id).maybeSingle();
+        if(cancelled)return;
+        if(e)throw e;
+        if(data)setSettings(rowToSettings(data));
+        // If no row (e.g. trigger didn't fire), settings stays at defaults; first update will upsert
+      }catch(e){if(!cancelled)setError(e.message||"Failed to load settings");}
+      finally{if(!cancelled)setLoading(false);}
+    })();
+    return()=>{cancelled=true;};
+  },[user?.id]);
+
+  // Optimistic update: change UI immediately, debounce upsert to avoid race conditions
+  // when user clicks multiple settings in quick succession.
+  const settingsRef=useRef(settings);
+  useEffect(()=>{settingsRef.current=settings;},[settings]);
+  const upsertTimerRef=useRef(null);
+  const updateSettings=(patch)=>{
+    const next={...settingsRef.current,...patch};
+    settingsRef.current=next;
+    setSettings(next);
+    // Debounce the network call by 400ms - the last call within the window wins
+    if(upsertTimerRef.current)clearTimeout(upsertTimerRef.current);
+    upsertTimerRef.current=setTimeout(async()=>{
+      const sb=getSupabase();if(!sb)return;
+      try{
+        const{error:e}=await sb.from("user_settings").upsert(settingsToRow(settingsRef.current,user.id),{onConflict:"user_id"});
+        if(e)throw e;
+      }catch(e){setError(e.message||"Failed to save settings");}
+    },400);
+  };
+
+  return {settings,loading,error,updateSettings};
+};
+
+// ─── Data: useBrandAssets hook (Supabase + Storage) ──────────────────────────
+// Brand assets store images in the `brand-assets` bucket (private). The DB row
+// holds `storage_path`; signed URLs (1hr expiry) are generated for display.
+const BRAND_ASSETS_BUCKET="brand-assets";
+const CALENDAR_IMAGES_BUCKET="calendar-images";
+const SIGNED_URL_EXPIRY_SEC=3600;
+
+// Helper: given an array of {id, path} objects, return a map of id → signed URL
+const batchSignedUrls=async(sb,bucket,items)=>{
+  const validItems=items.filter(it=>it.path&&!it.path.startsWith("data:")&&!it.path.startsWith("http"));
+  if(!validItems.length)return new Map();
+  try{
+    const{data,error}=await sb.storage.from(bucket).createSignedUrls(validItems.map(it=>it.path),SIGNED_URL_EXPIRY_SEC);
+    if(error)throw error;
+    const map=new Map();
+    validItems.forEach((it,i)=>{const result=data?.[i];if(result&&result.signedUrl)map.set(it.id,result.signedUrl);});
+    return map;
+  }catch(e){console.error("batchSignedUrls failed",e);return new Map();}
+};
+
+const rowToBrandAsset=(r,signedUrl)=>({
+  id:r.id,
+  name:r.name,
+  description:r.description||"",
+  storagePath:r.storage_path,
+  displayUrl:signedUrl||null,
+  createdAt:r.created_at?new Date(r.created_at).getTime():Date.now(),
+});
+
+const useBrandAssets=(user)=>{
+  const[assets,setAssets]=useState([]);
+  const[loading,setLoading]=useState(true);
+  const[error,setError]=useState("");
+
+  useEffect(()=>{
+    if(!user){setAssets([]);setLoading(false);return;}
+    const sb=getSupabase();if(!sb){setError("Supabase not ready");setLoading(false);return;}
+    let cancelled=false;
+    (async()=>{
+      setLoading(true);setError("");
+      try{
+        const{data,error:e}=await sb.from("brand_assets").select("*").order("created_at",{ascending:true});
+        if(cancelled)return;
+        if(e)throw e;
+        const rows=data||[];
+        const urlMap=await batchSignedUrls(sb,BRAND_ASSETS_BUCKET,rows.map(r=>({id:r.id,path:r.storage_path})));
+        if(cancelled)return;
+        setAssets(rows.map(r=>rowToBrandAsset(r,urlMap.get(r.id))));
+      }catch(e){if(!cancelled)setError(e.message||"Failed to load brand assets");}
+      finally{if(!cancelled)setLoading(false);}
+    })();
+    return()=>{cancelled=true;};
+  },[user?.id]);
+
+  // Add: upload file to Storage, insert DB row, return entry with signed URL
+  const addAsset=async(file,description="")=>{
+    const sb=getSupabase();if(!sb)throw new Error("Supabase not ready");
+    if(!file)throw new Error("No file");
+    // Build a deterministic path scoped to user (matches RLS policy: first folder = user id)
+    const ext=(file.name.split(".").pop()||"png").toLowerCase().replace(/[^a-z0-9]/g,"");
+    const path=`${user.id}/${Date.now()}-${Math.random().toString(36).slice(2,8)}.${ext}`;
+    const{error:uploadErr}=await sb.storage.from(BRAND_ASSETS_BUCKET).upload(path,file,{cacheControl:"3600",upsert:false,contentType:file.type||undefined});
+    if(uploadErr)throw uploadErr;
+    // Insert DB row
+    const{data,error:e}=await sb.from("brand_assets").insert({user_id:user.id,name:file.name,description,storage_path:path}).select().single();
+    if(e){
+      // Best-effort cleanup of orphaned storage file
+      try{await sb.storage.from(BRAND_ASSETS_BUCKET).remove([path]);}catch(_){}
+      throw e;
+    }
+    // Generate signed URL for immediate display
+    const{data:urlData}=await sb.storage.from(BRAND_ASSETS_BUCKET).createSignedUrl(path,SIGNED_URL_EXPIRY_SEC);
+    const newAsset=rowToBrandAsset(data,urlData?.signedUrl);
+    setAssets(a=>[...a,newAsset]);
+    return newAsset;
+  };
+
+  const updateDescription=async(id,description)=>{
+    const sb=getSupabase();if(!sb)throw new Error("Supabase not ready");
+    const{data,error:e}=await sb.from("brand_assets").update({description}).eq("id",id).select().single();
+    if(e)throw e;
+    setAssets(a=>a.map(x=>x.id===id?{...x,description:data.description||""}:x));
+  };
+
+  const removeAsset=async(id)=>{
+    const sb=getSupabase();if(!sb)throw new Error("Supabase not ready");
+    const asset=assets.find(a=>a.id===id);
+    // Remove from Storage first (best-effort)
+    if(asset?.storagePath){try{await sb.storage.from(BRAND_ASSETS_BUCKET).remove([asset.storagePath]);}catch(_){}}
+    const{error:e}=await sb.from("brand_assets").delete().eq("id",id);
+    if(e)throw e;
+    setAssets(a=>a.filter(x=>x.id!==id));
+  };
+
+  return {assets,loading,error,addAsset,updateDescription,removeAsset};
+};
+
+// ─── Data: useCalendarEntries hook (Supabase + Storage for images) ───────────
+// rowToCalendarEntry returns an entry with `image` (display URL) and `imagePath` (storage path).
+// For legacy data URLs (stored before Phase 6), `image` equals `imagePath` since the data URL is the display.
+// For Storage paths, `image` is set from a signed URL fetched separately; `imagePath` is the storage path.
+const rowToCalendarEntry=(r,signedUrl)=>{
+  const raw=r.image_path||null;
+  const isLegacyDataUrl=raw&&(raw.startsWith("data:")||raw.startsWith("http"));
+  return {
+    id:r.id,
+    type:r.type,
+    preview:r.preview,
+    fullText:r.full_text,
+    image:isLegacyDataUrl?raw:(signedUrl||null),
+    imagePath:raw,
+    date:r.date,
+    status:r.status,
+    createdAt:r.created_at?new Date(r.created_at).getTime():Date.now(),
+  };
+};
+
+const useCalendarEntries=(user)=>{
+  const[entries,setEntries]=useState([]);
+  const[loading,setLoading]=useState(true);
+  const[error,setError]=useState("");
+
+  // Initial load — fetch entries, then batch signed URLs for those with storage paths
+  useEffect(()=>{
+    if(!user){setEntries([]);setLoading(false);return;}
+    const sb=getSupabase();if(!sb){setError("Supabase not ready");setLoading(false);return;}
+    let cancelled=false;
+    (async()=>{
+      setLoading(true);setError("");
+      try{
+        const{data,error:e}=await sb.from("calendar_entries").select("*").order("created_at",{ascending:true});
+        if(cancelled)return;
+        if(e)throw e;
+        const rows=data||[];
+        const urlMap=await batchSignedUrls(sb,CALENDAR_IMAGES_BUCKET,rows.map(r=>({id:r.id,path:r.image_path})));
+        if(cancelled)return;
+        setEntries(rows.map(r=>rowToCalendarEntry(r,urlMap.get(r.id))));
+      }catch(e){if(!cancelled)setError(e.message||"Failed to load calendar entries");}
+      finally{if(!cancelled)setLoading(false);}
+    })();
+    return()=>{cancelled=true;};
+  },[user?.id]);
+
+  // Upload an image to the calendar-images bucket. Returns {path, signedUrl}.
+  const uploadCalendarImage=async(file)=>{
+    const sb=getSupabase();if(!sb)throw new Error("Supabase not ready");
+    if(!file)throw new Error("No file");
+    const ext=(file.name.split(".").pop()||"png").toLowerCase().replace(/[^a-z0-9]/g,"");
+    const path=`${user.id}/${Date.now()}-${Math.random().toString(36).slice(2,8)}.${ext}`;
+    const{error:uploadErr}=await sb.storage.from(CALENDAR_IMAGES_BUCKET).upload(path,file,{cacheControl:"3600",upsert:false,contentType:file.type||undefined});
+    if(uploadErr)throw uploadErr;
+    const{data:urlData}=await sb.storage.from(CALENDAR_IMAGES_BUCKET).createSignedUrl(path,SIGNED_URL_EXPIRY_SEC);
+    return {path,signedUrl:urlData?.signedUrl};
+  };
+
+  // Delete a storage image (best-effort). Used when removing an image or deleting an entry.
+  const deleteCalendarImage=async(path)=>{
+    if(!path||path.startsWith("data:")||path.startsWith("http"))return;
+    const sb=getSupabase();if(!sb)return;
+    try{await sb.storage.from(CALENDAR_IMAGES_BUCKET).remove([path]);}catch(e){console.error("storage cleanup failed",e);}
+  };
+
+  // Add a new entry (draft or scheduled). Returns the new entry (with real id).
+  // Helper: fetch a fresh signed URL for a storage path (used after insert/update so the UI sees the new image)
+  const getSignedUrlForPath=async(path)=>{
+    if(!path||path.startsWith("data:")||path.startsWith("http"))return null;
+    const sb=getSupabase();if(!sb)return null;
+    try{const{data}=await sb.storage.from(CALENDAR_IMAGES_BUCKET).createSignedUrl(path,SIGNED_URL_EXPIRY_SEC);return data?.signedUrl||null;}catch(e){return null;}
+  };
+
+  // Add a new entry. `imagePath` is a Storage path (or null). Caller should have uploaded the image first.
+  const addEntry=async({type,preview,fullText,imagePath,date,status})=>{
+    const sb=getSupabase();if(!sb)throw new Error("Supabase not ready");
+    const{data,error:e}=await sb.from("calendar_entries").insert({
+      user_id:user.id,
+      type,
+      preview:(preview||"").slice(0,60),
+      full_text:fullText||preview||"",
+      image_path:imagePath||null,
+      date:date||null,
+      status:status||"draft",
+    }).select().single();
+    if(e)throw e;
+    const signedUrl=await getSignedUrlForPath(data.image_path);
+    const entry=rowToCalendarEntry(data,signedUrl);
+    setEntries(es=>[...es,entry]);
+    return entry;
+  };
+
+  // Schedule: delete any existing scheduled entry of same type+text, then insert new on given date.
+  // Also clean up storage images for the deleted entries.
+  const scheduleEntry=async({type,preview,fullText,date,imagePath})=>{
+    const sb=getSupabase();if(!sb)throw new Error("Supabase not ready");
+    const matches=entries.filter(e=>e.status==="scheduled"&&e.type===type&&(e.fullText===fullText||e.preview===(preview||"").slice(0,60)));
+    if(matches.length){
+      const ids=matches.map(m=>m.id);
+      const{error:delErr}=await sb.from("calendar_entries").delete().in("id",ids);
+      if(delErr)throw delErr;
+      // Best-effort: clean up storage images of deleted entries (but not the one we're keeping)
+      matches.forEach(m=>{if(m.imagePath&&m.imagePath!==imagePath)deleteCalendarImage(m.imagePath);});
+    }
+    const{data,error:e}=await sb.from("calendar_entries").insert({
+      user_id:user.id,
+      type,
+      preview:(preview||"").slice(0,60),
+      full_text:fullText||preview||"",
+      image_path:imagePath||null,
+      date,
+      status:"scheduled",
+    }).select().single();
+    if(e)throw e;
+    const signedUrl=await getSignedUrlForPath(data.image_path);
+    const newEntry=rowToCalendarEntry(data,signedUrl);
+    setEntries(es=>[...es.filter(x=>!matches.find(m=>m.id===x.id)),newEntry]);
+    return newEntry;
+  };
+
+  // Update an entry. Caller passes the full updated entry shape. If imagePath changed, clean up old storage object.
+  const updateEntry=async(updated)=>{
+    const sb=getSupabase();if(!sb)throw new Error("Supabase not ready");
+    const prev=entries.find(x=>x.id===updated.id);
+    const{data,error:e}=await sb.from("calendar_entries").update({
+      type:updated.type,
+      preview:(updated.preview||"").slice(0,60),
+      full_text:updated.fullText,
+      image_path:updated.imagePath||null,
+      date:updated.date,
+      status:updated.status,
+    }).eq("id",updated.id).select().single();
+    if(e)throw e;
+    // If imagePath changed and old one was a Storage path, clean it up
+    if(prev&&prev.imagePath&&prev.imagePath!==data.image_path)deleteCalendarImage(prev.imagePath);
+    const signedUrl=await getSignedUrlForPath(data.image_path);
+    const fresh=rowToCalendarEntry(data,signedUrl);
+    setEntries(es=>es.map(x=>x.id===fresh.id?fresh:x));
+    return fresh;
+  };
+
+  // Delete by id; also clean up storage image
+  const deleteEntry=async(id)=>{
+    const sb=getSupabase();if(!sb)throw new Error("Supabase not ready");
+    const entry=entries.find(x=>x.id===id);
+    const{error:e}=await sb.from("calendar_entries").delete().eq("id",id);
+    if(e)throw e;
+    if(entry?.imagePath)deleteCalendarImage(entry.imagePath);
+    setEntries(es=>es.filter(x=>x.id!==id));
+  };
+
+  return {entries,loading,error,addEntry,scheduleEntry,updateEntry,deleteEntry,uploadCalendarImage};
+};
+
+// ─── Data: useUtmLinks hook (Supabase) ───────────────────────────────────────
+const rowToUtmLink=(r)=>({id:r.id,url:r.full_url,destUrl:r.dest_url,source:r.source,medium:r.medium,campaign:r.campaign,label:r.label,createdAt:r.created_at?new Date(r.created_at).getTime():Date.now()});
+
+const useUtmLinks=(user)=>{
+  const[links,setLinks]=useState([]);
+  const[loading,setLoading]=useState(true);
+  const[error,setError]=useState("");
+
+  useEffect(()=>{
+    if(!user){setLinks([]);setLoading(false);return;}
+    const sb=getSupabase();if(!sb){setError("Supabase not ready");setLoading(false);return;}
+    let cancelled=false;
+    (async()=>{
+      setLoading(true);setError("");
+      try{
+        const{data,error:e}=await sb.from("utm_links").select("*").order("created_at",{ascending:false});
+        if(cancelled)return;
+        if(e)throw e;
+        setLinks((data||[]).map(rowToUtmLink));
+      }catch(e){if(!cancelled)setError(e.message||"Failed to load UTM links");}
+      finally{if(!cancelled)setLoading(false);}
+    })();
+    return()=>{cancelled=true;};
+  },[user?.id]);
+
+  const addLink=async({destUrl,source,medium,campaign,label,fullUrl})=>{
+    const sb=getSupabase();if(!sb)throw new Error("Supabase not ready");
+    const{data,error:e}=await sb.from("utm_links").insert({user_id:user.id,label,source,medium,campaign,dest_url:destUrl,full_url:fullUrl}).select().single();
+    if(e)throw e;
+    setLinks(l=>[rowToUtmLink(data),...l]);
+    return data;
+  };
+
+  const deleteLink=async(id)=>{
+    const sb=getSupabase();if(!sb)throw new Error("Supabase not ready");
+    const{error:e}=await sb.from("utm_links").delete().eq("id",id);
+    if(e)throw e;
+    setLinks(l=>l.filter(x=>x.id!==id));
+  };
+
+  return {links,loading,error,addLink,deleteLink};
+};
+
+// ─── Auth: useAuth hook ──────────────────────────────────────────────────────
+const useAuth=()=>{
+  const[user,setUser]=useState(null);
+  const[loading,setLoading]=useState(true);
+  useEffect(()=>{
+    const sb=getSupabase();
+    if(!sb){setLoading(false);return;}
+    // Get current session
+    sb.auth.getSession().then(({data})=>{setUser(data?.session?.user||null);setLoading(false);});
+    // Subscribe to auth changes (login, logout, token refresh)
+    const{data:listener}=sb.auth.onAuthStateChange((_event,session)=>{setUser(session?.user||null);});
+    return ()=>{try{listener?.subscription?.unsubscribe();}catch(e){}};
+  },[]);
+  const signOut=async()=>{const sb=getSupabase();if(sb)await sb.auth.signOut();};
+  return {user,loading,signOut};
+};
+
+// ─── Login Screen ────────────────────────────────────────────────────────────
+const LoginScreen=()=>{
+  const[email,setEmail]=useState("");
+  const[state,setState]=useState("idle"); // idle | sending | sent | error
+  const[error,setError]=useState("");
+  const submit=async()=>{
+    if(!email||!email.includes("@")){setError("Enter a valid email");return;}
+    setState("sending");setError("");
+    try{
+      const sb=getSupabase();
+      if(!sb){throw new Error("Supabase not ready, refresh the page");}
+      const{error:e}=await sb.auth.signInWithOtp({email,options:{emailRedirectTo:typeof window!=="undefined"?window.location.origin:undefined}});
+      if(e)throw e;
+      setState("sent");
+    }catch(e){
+      setError(e.message||"Failed to send magic link");
+      setState("error");
+    }
+  };
+  return (<div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:C.bg,padding:"24px"}}>
+    <div style={{maxWidth:420,width:"100%",background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,padding:"36px 32px",animation:"fadeIn 0.3s ease-out"}}>
+      {/* Logo */}
+      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:28}}>
+        <div style={{width:36,height:36,borderRadius:8,background:`linear-gradient(135deg,${C.accent},#E8C06A)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,fontWeight:700,color:C.bg}}>H</div>
+        <div style={{fontSize:18,fontWeight:700,color:C.bright,letterSpacing:"-0.01em"}}>Honoroll</div>
+      </div>
+      {/* Title */}
+      <h1 style={{fontFamily:font,fontSize:22,fontWeight:600,color:C.bright,letterSpacing:"-0.02em",margin:"0 0 8px"}}>Sign in to dashboard</h1>
+      <p style={{fontSize:13,color:C.muted,lineHeight:1.5,margin:"0 0 24px"}}>We'll send you a magic link. No password required.</p>
+      {/* Form */}
+      {state!=="sent"&&(<>
+        <label style={{display:"block",fontSize:11,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Email address</label>
+        <input
+          type="email"
+          value={email}
+          onChange={e=>{setEmail(e.target.value);setError("");}}
+          onKeyDown={e=>{if(e.key==="Enter"&&!state.includes("send"))submit();}}
+          placeholder="you@honoroll.com"
+          autoFocus
+          disabled={state==="sending"}
+          style={{width:"100%",background:"rgba(200,205,211,0.05)",border:`1px solid ${error?"rgba(248,113,113,0.4)":C.border}`,borderRadius:8,padding:"11px 14px",fontSize:14,fontFamily:font,color:C.bright,outline:"none",boxSizing:"border-box",marginBottom:14}}
+        />
+        {error&&<div style={{fontSize:12,color:C.red,marginBottom:14,padding:"8px 12px",background:C.redSoft,borderRadius:6}}>{error}</div>}
+        <button
+          onClick={submit}
+          disabled={state==="sending"||!email}
+          style={{width:"100%",padding:"12px",fontSize:14,fontWeight:600,fontFamily:font,color:C.bg,background:state==="sending"||!email?"rgba(200,205,211,0.1)":`linear-gradient(135deg,${C.accent},#E8C06A)`,border:"none",borderRadius:8,cursor:state==="sending"||!email?"not-allowed":"pointer",transition:"all 0.2s",opacity:state==="sending"||!email?0.5:1}}
+        >
+          {state==="sending"?"Sending magic link...":"Send magic link"}
+        </button>
+      </>)}
+      {state==="sent"&&(<div style={{textAlign:"center",padding:"20px 0"}}>
+        <div style={{fontSize:32,marginBottom:12}}>✉️</div>
+        <div style={{fontSize:15,fontWeight:600,color:C.bright,marginBottom:6}}>Check your inbox</div>
+        <div style={{fontSize:13,color:C.muted,lineHeight:1.5,marginBottom:18}}>We sent a magic link to <span style={{color:C.bright,fontFamily:mono}}>{email}</span>. Click it to sign in.</div>
+        <button onClick={()=>{setState("idle");setEmail("");}} style={{fontSize:12,color:C.muted,background:"none",border:`1px solid ${C.border}`,borderRadius:6,padding:"6px 14px",cursor:"pointer",fontFamily:mono}}>Use a different email</button>
+      </div>)}
+      <div style={{marginTop:24,paddingTop:18,borderTop:`1px solid ${C.border}`,fontSize:11,color:C.dim,textAlign:"center",lineHeight:1.5}}>Access by invitation only. Contact your administrator if you need an account.</div>
+    </div>
+  </div>);
+};
+
 // ─── App ─────────────────────────────────────────────────────────────────────
-const KEYS={key:null,region:null,seoKey:null,groqKey:null};
-const MOCK_SITE={id:"mock",name:"My Website",domain:"example.com"};
+const KEYS={key:"",region:null,seoKey:"",groqKey:""};
+const MOCK_SITE={id:"b383e359-7384-45e0-81b4-0a33ba905df3",name:"Honoroll Staging",domain:"demo-casino-staging.rofl.build"};
 const MOCK_DATA=(()=>{
   const hourly=Array.from({length:17},(_,i)=>({label:`${i.toString().padStart(2,"0")}:00`,pageviews:Math.floor(Math.random()*200+(i>6&&i<16?120:30)),sessions:Math.floor(Math.random()*80+(i>6&&i<16?50:10))}));
   const evtNames=["cta-click","signup-form","docs-search"];
@@ -1717,42 +2291,61 @@ const MOCK_DATA=(()=>{
     seoAudit:{score:74,grade:"B",priorities:[{issue:"30 images missing alt text",severity:"warning"},{issue:"No structured data (JSON-LD) found",severity:"warning"},{issue:"Meta description too short (78 chars)",severity:"info"},{issue:"H1 tag missing on 2 pages",severity:"warning"}]}};
 })();
 
+// Outer App: only auth-related hooks live here. Either renders LoginScreen or AuthenticatedApp.
 function App(){
-  const USE_MOCK=false;
+  const{user,loading:authLoading,signOut}=useAuth();
+  if(authLoading) return (<div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:C.bg}}><div style={{display:"flex",gap:6}}>{[0,1,2].map(i=>(<div key={i} style={{width:8,height:8,borderRadius:"50%",background:C.accent,animation:`pulse 1.2s ease-in-out ${i*0.2}s infinite`}}/>))}</div></div>);
+  if(!user) return <LoginScreen/>;
+  return <AuthenticatedApp user={user} signOut={signOut}/>;
+}
+
+// All the dashboard hooks/logic live here, only mounted when user is authenticated.
+function AuthenticatedApp({user,signOut}){
+  const USE_MOCK=true;
   const[site]=useState(MOCK_SITE);
   const[tab,setTab]=useState("analytics");
   const[showSettings,setShowSettings]=useState(false);
   const[rangeId,setRangeId]=useState("24h");
   const[compareMode,setCompareMode]=useState("previous");
-  const[contentState,setContentState]=useState({posts:null,thread:null,article:null,calendar:[],tone:"founder"});
-  const[brandAssets,setBrandAssets]=useState(()=>{
-    try{const s=typeof localStorage!=="undefined"?localStorage.getItem("honoroll_brand_assets"):null;return s?JSON.parse(s):[];}catch(e){return[];}
+  const[contentState,setContentState]=useState(()=>{
+    // Drop legacy calendar (now stored in Supabase). Keep transient drafts in localStorage.
+    try{const s=typeof localStorage!=="undefined"?localStorage.getItem("honoroll_content_state"):null;
+      const parsed=s?JSON.parse(s):null;
+      if(parsed){const{calendar,...rest}=parsed;return {posts:null,thread:null,article:null,tone:"founder",...rest};}
+      return {posts:null,thread:null,article:null,tone:"founder"};
+    }catch(e){return{posts:null,thread:null,article:null,tone:"founder"};}
   });
-  useEffect(()=>{try{if(typeof localStorage!=="undefined")localStorage.setItem("honoroll_brand_assets",JSON.stringify(brandAssets));}catch(e){}},[brandAssets]);
-  const[utmHistory,setUtmHistory]=useState(()=>{
-    try{const s=typeof localStorage!=="undefined"?localStorage.getItem("honoroll_utm_history"):null;return s?JSON.parse(s):[];}catch(e){return[];}
-  });
-  useEffect(()=>{try{if(typeof localStorage!=="undefined")localStorage.setItem("honoroll_utm_history",JSON.stringify(utmHistory));}catch(e){}},[utmHistory]);
-  const[contextFiles,setContextFiles]=useState(()=>{
-    try{const stored=typeof localStorage!=="undefined"?localStorage.getItem("honoroll_context_files"):null;return stored?JSON.parse(stored):[];}catch(e){return[];}
-  });
-  useEffect(()=>{try{if(typeof localStorage!=="undefined")localStorage.setItem("honoroll_context_files",JSON.stringify(contextFiles));}catch(e){}},[contextFiles]);
-  const[defaults,setDefaults]=useState(()=>{
-    try{const s=typeof localStorage!=="undefined"?localStorage.getItem("honoroll_defaults"):null;return s?JSON.parse(s):{tone:"founder",postLength:"normal",threadLength:"normal",articleLength:"normal"};}catch(e){return{tone:"founder",postLength:"normal",threadLength:"normal",articleLength:"normal"};}
-  });
-  useEffect(()=>{try{if(typeof localStorage!=="undefined")localStorage.setItem("honoroll_defaults",JSON.stringify(defaults));}catch(e){}},[defaults]);
+  useEffect(()=>{try{if(typeof localStorage!=="undefined")localStorage.setItem("honoroll_content_state",JSON.stringify(contentState));}catch(e){}},[contentState]);
+  // Brand assets now in Supabase + Storage (per user)
+  const brandAssets=useBrandAssets(user);
+  // One-time cleanup of old localStorage entry
+  useEffect(()=>{try{if(typeof localStorage!=="undefined")localStorage.removeItem("honoroll_brand_assets");}catch(e){}},[]);
+  // UTM links now stored in Supabase (per user)
+  const utmLinks=useUtmLinks(user);
+  // One-time cleanup of old localStorage entry
+  useEffect(()=>{try{if(typeof localStorage!=="undefined")localStorage.removeItem("honoroll_utm_history");}catch(e){}},[]);
+  // Context files now stored in Supabase (per user)
+  const ctxFiles=useContextFiles(user);
+  // One-time cleanup: drop old localStorage data (we no longer persist context_files there)
+  useEffect(()=>{try{if(typeof localStorage!=="undefined")localStorage.removeItem("honoroll_context_files");}catch(e){}},[]);
+  // Defaults (tone, post/thread/article length) now stored in Supabase user_settings
+  const userSettings=useUserSettings(user);
+  // One-time cleanup of old localStorage entry
+  useEffect(()=>{try{if(typeof localStorage!=="undefined")localStorage.removeItem("honoroll_defaults");}catch(e){}},[]);
+  // Calendar entries now stored in Supabase (per user)
+  const calendarEntries=useCalendarEntries(user);
 
   const handleTabChange=(t)=>{setShowSettings(false);setTab(t);};
   const handleSettings=()=>setShowSettings(s=>!s);
 
   return (<div style={{fontFamily:font,background:C.bg,color:C.text,minHeight:"100vh"}}>
-    <Header active={tab} onChange={handleTabChange} onSettings={handleSettings} settingsActive={showSettings}/>
+    <Header active={tab} onChange={handleTabChange} onSettings={handleSettings} settingsActive={showSettings} user={user} onSignOut={signOut}/>
     <div>
-      {showSettings?(<div style={{animation:"fadeIn 0.3s ease-out"}}><SettingsPage contextFiles={contextFiles} onUpdateContextFiles={setContextFiles} brandAssets={brandAssets} onUpdateAssets={setBrandAssets} defaults={defaults} onUpdateDefaults={setDefaults}/></div>)
+      {showSettings?(<div style={{animation:"fadeIn 0.3s ease-out"}}><SettingsPage ctxFiles={ctxFiles} brandAssets={brandAssets} defaults={userSettings.settings} onUpdateDefaults={userSettings.updateSettings}/></div>)
       :(<>
-        {tab==="analytics"&&<div style={{animation:"fadeIn 0.3s ease-out"}}><Dashboard cfg={KEYS} site={site} useMock={USE_MOCK} onSettings={handleSettings} rangeId={rangeId} onRangeChange={setRangeId} compareMode={compareMode} onCompareChange={setCompareMode} contextFiles={contextFiles}/></div>}
-        {tab==="content"&&<div style={{animation:"fadeIn 0.3s ease-out"}}><ContentPage analyticsData={MOCK_DATA} contentState={contentState} setContentState={setContentState} brandAssets={brandAssets} onUpdateAssets={setBrandAssets} contextFiles={contextFiles} onUpdateContextFiles={setContextFiles} defaults={defaults}/></div>}
-        {tab==="utm"&&<div style={{animation:"fadeIn 0.3s ease-out"}}><UtmPage utmHistory={utmHistory} onUpdateHistory={setUtmHistory}/></div>}
+        {tab==="analytics"&&<div style={{animation:"fadeIn 0.3s ease-out"}}><Dashboard cfg={KEYS} site={site} useMock={USE_MOCK} onSettings={handleSettings} rangeId={rangeId} onRangeChange={setRangeId} compareMode={compareMode} onCompareChange={setCompareMode} contextFiles={ctxFiles.files}/></div>}
+        {tab==="content"&&<div style={{animation:"fadeIn 0.3s ease-out"}}><ContentPage analyticsData={MOCK_DATA} contentState={contentState} setContentState={setContentState} contextFiles={ctxFiles.files} defaults={userSettings.settings} calendarEntries={calendarEntries}/></div>}
+        {tab==="utm"&&<div style={{animation:"fadeIn 0.3s ease-out"}}><UtmPage utmLinks={utmLinks}/></div>}
       </>)}
     </div>
   </div>);
