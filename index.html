@@ -184,13 +184,23 @@ function useAnalyticsData(cfg,site,rangeId,compareMode) {
       const eventsByHour={};const eventNames=new Set();
       (eventSeries||[]).forEach(e=>{const h=fmtLabel(e.t);if(!eventsByHour[h])eventsByHour[h]={label:h};eventsByHour[h][e.x]=(eventsByHour[h][e.x]||0)+e.y;eventNames.add(e.x);});
       let pageSpeed=null;
-      try{const psiRes=await fetch(`https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=https://${site.domain}&category=performance&category=seo&category=accessibility`);
-        if(psiRes.ok){const psi=await psiRes.json();const cats=psi.lighthouseResult?.categories||{};const a=psi.lighthouseResult?.audits||{};
-          pageSpeed={performance:Math.round((cats.performance?.score||0)*100),seo:Math.round((cats.seo?.score||0)*100),accessibility:Math.round((cats.accessibility?.score||0)*100),
-            vitals:{LCP:{value:a["largest-contentful-paint"]?.displayValue||"—",rating:a["largest-contentful-paint"]?.score>=0.9?"good":a["largest-contentful-paint"]?.score>=0.5?"needs-improvement":"poor"},
-              FCP:{value:a["first-contentful-paint"]?.displayValue||"—",rating:a["first-contentful-paint"]?.score>=0.9?"good":a["first-contentful-paint"]?.score>=0.5?"needs-improvement":"poor"},
-              CLS:{value:a["cumulative-layout-shift"]?.displayValue||"—",rating:a["cumulative-layout-shift"]?.score>=0.9?"good":a["cumulative-layout-shift"]?.score>=0.5?"needs-improvement":"poor"},
-              TTFB:{value:a["server-response-time"]?.displayValue||"—",rating:a["server-response-time"]?.score>=0.9?"good":a["server-response-time"]?.score>=0.5?"needs-improvement":"poor"}}};}}catch(e){}
+      const psiCacheKey=`honoroll_pagespeed_${site.domain}`;
+      const PSI_TTL_MS=24*60*60*1000;
+      try{
+        const cachedRaw=typeof localStorage!=="undefined"?localStorage.getItem(psiCacheKey):null;
+        if(cachedRaw){const cached=JSON.parse(cachedRaw);if(cached&&cached.timestamp&&(Date.now()-cached.timestamp)<PSI_TTL_MS&&cached.data){pageSpeed=cached.data;}}
+      }catch(e){}
+      if(!pageSpeed){
+        try{const psiRes=await fetch(`https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=https://${site.domain}&category=performance&category=seo&category=accessibility`);
+          if(psiRes.ok){const psi=await psiRes.json();const cats=psi.lighthouseResult?.categories||{};const a=psi.lighthouseResult?.audits||{};
+            pageSpeed={performance:Math.round((cats.performance?.score||0)*100),seo:Math.round((cats.seo?.score||0)*100),accessibility:Math.round((cats.accessibility?.score||0)*100),
+              vitals:{LCP:{value:a["largest-contentful-paint"]?.displayValue||"—",rating:a["largest-contentful-paint"]?.score>=0.9?"good":a["largest-contentful-paint"]?.score>=0.5?"needs-improvement":"poor"},
+                FCP:{value:a["first-contentful-paint"]?.displayValue||"—",rating:a["first-contentful-paint"]?.score>=0.9?"good":a["first-contentful-paint"]?.score>=0.5?"needs-improvement":"poor"},
+                CLS:{value:a["cumulative-layout-shift"]?.displayValue||"—",rating:a["cumulative-layout-shift"]?.score>=0.9?"good":a["cumulative-layout-shift"]?.score>=0.5?"needs-improvement":"poor"},
+                TTFB:{value:a["server-response-time"]?.displayValue||"—",rating:a["server-response-time"]?.score>=0.9?"good":a["server-response-time"]?.score>=0.5?"needs-improvement":"poor"}}};
+            try{if(typeof localStorage!=="undefined")localStorage.setItem(psiCacheKey,JSON.stringify({timestamp:Date.now(),data:pageSpeed}));}catch(e){}
+          }}catch(e){}
+      }
       let seoAudit=null;
       try{const sR=await fetch(`/api/seo?domain=${encodeURIComponent(site.domain)}`);if(sR.ok)seoAudit=await sR.json();}catch(e){}
       setData({statsToday,statsYesterday,active:active.visitors||0,timeSeries:timeData,unit,
@@ -2268,7 +2278,7 @@ const LoginScreen=()=>{
 
 // ─── App ─────────────────────────────────────────────────────────────────────
 const KEYS={key:"",region:null,seoKey:"",groqKey:""};
-const MOCK_SITE={id:"b383e359-7384-45e0-81b4-0a33ba905df3",name:"Honoroll Staging",domain:"demo-casino-staging.rofl.build"};
+const MOCK_SITE={id:"b383e359-7384-45e0-81b4-0a33ba905df3",name:"Honoroll",domain:"honoroll.io"};
 const MOCK_DATA=(()=>{
   const hourly=Array.from({length:17},(_,i)=>({label:`${i.toString().padStart(2,"0")}:00`,pageviews:Math.floor(Math.random()*200+(i>6&&i<16?120:30)),sessions:Math.floor(Math.random()*80+(i>6&&i<16?50:10))}));
   const evtNames=["cta-click","signup-form","docs-search"];
