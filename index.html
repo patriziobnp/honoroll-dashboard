@@ -1061,9 +1061,42 @@ The user message contains a section wrapped in "=== USER-PROVIDED CONTEXT ===". 
 - If user context conflicts with your defaults, USER CONTEXT WINS.
 Generic AI prose, hype words, or made-up product details are not acceptable when this context is present.\n\n`;
 
+// Distillation of the X For You algorithm (xai-org/x-algorithm, May 2026 release).
+// The Phoenix Grok-transformer ranker scores each post as a weighted sum of
+// predicted probabilities across many distinct engagement actions, then
+// attenuates by author diversity. To maximise distribution, every generation
+// must explicitly try to trigger positive signals and avoid negative ones.
+const ALGORITHM_DIRECTIVE=`ALGORITHM OPTIMIZATION (X For You feed — Phoenix ranker, May 2026):
+The For You ranker scores posts as Σ(weight × P(action)) across these actions, then attenuates by author diversity. Write to MAXIMIZE the positive actions and AVOID the negatives.
+
+POSITIVE SIGNALS — design the post to provoke at least 3 of these:
+- P(reply): ask a real question, take a contrarian position, or state something half-true that begs correction. Reply rate is the loudest engagement signal.
+- P(repost) / P(quote): make ONE quotable line that someone wants to forward or add commentary to. Avoid multi-claim posts.
+- P(click): if there is a link, use a curiosity gap — tease, do not reveal. If no link, replace with a profile-click hook.
+- P(profile_click): close with a line that makes a reader curious who wrote this ("after N months of...", "we just shipped...", a non-obvious credential).
+- P(dwell): for threads/articles, the first 2 lines must compel scroll; each subsequent unit adds new information, never restates.
+- P(follow_author): consistent POV across the post — one voice, one stance, one expertise signal.
+- P(video_view) / P(photo_expand): when an image is attached, the post text must reference what is in the image, not describe it generically.
+
+NEGATIVE SIGNALS — refuse to produce content that triggers these:
+- P(not_interested): generic AI cadence, hype words ("revolutionary", "game-changing", "unlock"), vague benefit claims, multiple emoji, hashtag spam.
+- P(block_author) / P(mute_author) / P(report): manipulative framing, fake urgency, misleading hooks, anything that bait-and-switches.
+
+OUT-OF-NETWORK REACH (Phoenix retrieval, two-tower ML):
+The ranker pulls in posts from users who DO NOT follow Honoroll by matching ML embeddings of post content to embeddings of their engagement history. To be eligible for this discovery surface, use the precise on-topic terminology of the crypto-casino category — names of competitors and primitives, named protocols, specific mechanism words (e.g. "commit-reveal RNG", "TEE attestation", "USDC settlement", "house edge", "EIP-712"). The model matches concepts, not hashtags.
+
+AUTHOR DIVERSITY SCORING:
+The ranker attenuates repeated authors in a single feed. Do not echo the structure or opening of recent Honoroll posts — vary the format (claim / question / story / numbered list) and the opening pattern.
+
+GENERAL CONSTRUCTION:
+- The first sentence must work standalone in a preview — that is what the user sees before tapping.
+- One concrete claim per post. Don't dilute with multiple ideas.
+- For threads: tweet 1 = the hook (must promise specific payoff). Tweets 2..N each add one new piece of information. The algorithm can serve any single tweet of a thread independently, so each must stand alone too.
+- No em-dashes (—). Use commas, periods, colons.\n\n`;
+
 const makePrompt=(base,tone,length,type,topic)=>{
   const topicLine=topic&&topic.trim()?`PRIMARY TOPIC FOR THIS GENERATION (treat as the central directive):\n${topic.trim()}\n\n`:"";
-  return `${CONTEXT_DIRECTIVE}${topicLine}${base}\n\nTONE INSTRUCTION: ${TONE_INSTRUCTIONS[tone]||TONE_INSTRUCTIONS.founder}\n\nLENGTH INSTRUCTION: ${LENGTH_INSTRUCTIONS[type]?.[length]||LENGTH_INSTRUCTIONS[type]?.normal||""}`;
+  return `${CONTEXT_DIRECTIVE}${ALGORITHM_DIRECTIVE}${topicLine}${base}\n\nTONE INSTRUCTION: ${TONE_INSTRUCTIONS[tone]||TONE_INSTRUCTIONS.founder}\n\nLENGTH INSTRUCTION: ${LENGTH_INSTRUCTIONS[type]?.[length]||LENGTH_INSTRUCTIONS[type]?.normal||""}`;
 };
 
 const X_POST_PROMPT=`You generate X (Twitter) post drafts for Honoroll. Analytics data and competitor styles are INTERNAL CONTEXT ONLY.
@@ -2042,7 +2075,13 @@ const ContentPage=({analyticsData,contentState,setContentState,contextFiles,defa
           {grouped.map(({cat,count})=>(<span key={cat.id} style={{display:"inline-flex",alignItems:"center",gap:S.xs,padding:`${S.xs-1}px ${S.sm+2}px`,fontSize:T.eyebrow,fontFamily:mono,color:cat.color,background:`${cat.color}1A`,border:`1px solid ${cat.color}40`,borderRadius:4}}>{cat.icon} {cat.label}{count>1?` ×${count}`:""}</span>))}
         </div>);
       })()}
-      <div style={{marginTop:S.sm,fontSize:T.eyebrow,color:C.dim,fontFamily:mono,textAlign:"right"}} className="tabnum">{topic.length} chars</div>
+      <div style={{marginTop:S.sm,display:"flex",justifyContent:"space-between",alignItems:"center",gap:S.sm,flexWrap:"wrap"}}>
+        <a href="https://github.com/xai-org/x-algorithm" target="_blank" rel="noopener noreferrer" title="View the X algorithm source" style={{display:"inline-flex",alignItems:"center",gap:S.xs+1,fontSize:T.eyebrow,fontFamily:mono,color:C.muted,textDecoration:"none",padding:`${S.xs-1}px ${S.sm+2}px`,background:C.surfaceInset,border:`1px solid ${C.border}`,borderRadius:5,letterSpacing:"0.06em"}}>
+          <span style={{color:C.accent}}>✦</span>
+          <span>Optimized for X For You algorithm · May 2026</span>
+        </a>
+        <span style={{fontSize:T.eyebrow,color:C.dim,fontFamily:mono}} className="tabnum">{topic.length} chars</span>
+      </div>
     </SectionCard>
 
     {/* Tone */}
