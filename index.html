@@ -2932,8 +2932,13 @@ const LoginScreen=()=>{
     try{
       const sb=getSupabase();
       if(!sb){throw new Error("Supabase not ready, refresh the page");}
-      const{error:e}=await sb.auth.signInWithOtp({email,options:{emailRedirectTo:typeof window!=="undefined"?window.location.origin:undefined}});
-      if(e)throw e;
+      // We deliberately do not check the {error} returned by signInWithOtp.
+      // With shouldCreateUser:false, an unregistered email returns an explicit
+      // error ("user not found" / "signups disabled") — surfacing that would
+      // let an attacker enumerate valid invited users. Show the same neutral
+      // confirmation regardless of Supabase's response. Real infrastructure
+      // errors (network down, client not ready) still throw and reach catch.
+      await sb.auth.signInWithOtp({email,options:{shouldCreateUser:false,emailRedirectTo:typeof window!=="undefined"?window.location.origin:undefined}});
       setState("sent");
     }catch(e){
       setError(e.message||"Failed to send magic link");
@@ -2975,7 +2980,7 @@ const LoginScreen=()=>{
       {state==="sent"&&(<div style={{textAlign:"center",padding:"20px 0"}}>
         <div style={{fontSize:32,marginBottom:12}}>✉️</div>
         <div style={{fontSize:15,fontWeight:600,color:C.bright,marginBottom:6}}>Check your inbox</div>
-        <div style={{fontSize:13,color:C.muted,lineHeight:1.5,marginBottom:18}}>We sent a magic link to <span style={{color:C.bright,fontFamily:mono}}>{email}</span>. Click it to sign in.</div>
+        <div style={{fontSize:13,color:C.muted,lineHeight:1.5,marginBottom:18}}>If <span style={{color:C.bright,fontFamily:mono}}>{email}</span> is registered, a magic link is on its way. Click it to sign in.</div>
         <button onClick={()=>{setState("idle");setEmail("");}} style={{fontSize:12,color:C.muted,background:"none",border:`1px solid ${C.border}`,borderRadius:6,padding:"6px 14px",cursor:"pointer",fontFamily:mono}}>Use a different email</button>
       </div>)}
       <div style={{marginTop:24,paddingTop:18,borderTop:`1px solid ${C.border}`,fontSize:11,color:C.dim,textAlign:"center",lineHeight:1.5}}>Access by invitation only. Contact your administrator if you need an account.</div>
