@@ -2362,10 +2362,6 @@ const SettingsPage=({ctxFiles,brandAssets,defaults,onUpdateDefaults,saveState})=
   const[section,setSection]=useState("context");
   const[showContext,setShowContext]=useState(true);
   const[showAssets,setShowAssets]=useState(true);
-  // Umami Website ID is sensitive (anyone with it + the anon key can query
-  // the Umami workspace). Hidden by default; toggleable when the user needs
-  // to copy/edit it. Pattern matches password fields.
-  const[showUmamiId,setShowUmamiId]=useState(false);
 
   return (<div style={{maxWidth:1280,margin:"0 auto",padding:`${S.xl}px ${S.xxl-4}px`,position:"relative"}}>
     <PageBackdrop color="rgba(176,90,217,0.05)"/>
@@ -2433,11 +2429,8 @@ const SettingsPage=({ctxFiles,brandAssets,defaults,onUpdateDefaults,saveState})=
             </div>
             <div>
               <label style={{display:"block",marginBottom:S.sm-2}}><Eyebrow>Umami Website ID</Eyebrow></label>
-              <div style={{position:"relative"}}>
-                <input type={showUmamiId?"text":"password"} value={defaults.umamiWebsiteId||""} onChange={e=>onUpdateDefaults({umamiWebsiteId:e.target.value.trim()})} placeholder="••••••••-••••-••••-••••-••••••••••••" autoComplete="off" spellCheck="false" style={{width:"100%",background:C.surfaceInset,border:`1px solid ${C.border}`,borderRadius:8,padding:`${S.md-2}px ${S.xxxl+S.md}px ${S.md-2}px ${S.md}px`,fontSize:T.body,fontFamily:mono,color:C.bright,outline:"none",boxSizing:"border-box",letterSpacing:showUmamiId?"normal":"0.1em"}}/>
-                <button type="button" onClick={()=>setShowUmamiId(v=>!v)} title={showUmamiId?"Hide":"Show"} aria-label={showUmamiId?"Hide Umami Website ID":"Show Umami Website ID"} style={{position:"absolute",top:"50%",right:S.sm,transform:"translateY(-50%)",padding:`${S.xs+1}px ${S.sm+2}px`,fontSize:T.caption-1,fontFamily:mono,fontWeight:600,color:C.muted,background:C.surfaceElevated,border:`1px solid ${C.border}`,borderRadius:6,cursor:"pointer",letterSpacing:"0.06em",textTransform:"uppercase"}}>{showUmamiId?"Hide":"Show"}</button>
-              </div>
-              <div style={{fontSize:T.eyebrow,color:C.dim,marginTop:S.xs,fontFamily:mono}}>UUID from cloud.umami.is. Drives all analytics queries. Hidden by default to avoid accidental exposure in screenshots.</div>
+              <input type="password" value={defaults.umamiWebsiteId||""} onChange={e=>onUpdateDefaults({umamiWebsiteId:e.target.value.trim()})} placeholder="••••••••-••••-••••-••••-••••••••••••" autoComplete="off" spellCheck="false" style={{width:"100%",background:C.surfaceInset,border:`1px solid ${C.border}`,borderRadius:8,padding:`${S.md-2}px ${S.md}px`,fontSize:T.body,fontFamily:mono,color:C.bright,outline:"none",boxSizing:"border-box",letterSpacing:"0.1em"}}/>
+              <div style={{fontSize:T.eyebrow,color:C.dim,marginTop:S.xs,fontFamily:mono}}>UUID from cloud.umami.is. Drives all analytics queries. Masked to avoid accidental exposure in screenshots.</div>
             </div>
             <div>
               <label style={{display:"block",marginBottom:S.sm-2}}><Eyebrow>Mock data mode</Eyebrow></label>
