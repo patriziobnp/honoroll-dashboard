@@ -2927,7 +2927,10 @@ function App(){
   useEffect(()=>{const t=setTimeout(()=>setShowShimmer(false),1800);return()=>clearTimeout(t);},[]);
   if(authLoading) return (<div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:C.bg}}>{showShimmer&&<div className="page-shimmer"/>}<div style={{display:"flex",gap:6}}>{[0,1,2].map(i=>(<div key={i} style={{width:8,height:8,borderRadius:"50%",background:C.accent,animation:`pulse 1.2s ease-in-out ${i*0.2}s infinite`}}/>))}</div></div>);
   if(!user) return (<>{showShimmer&&<div className="page-shimmer"/>}<LoginScreen/></>);
-  return (<>{showShimmer&&<div className="page-shimmer"/>}<AuthenticatedApp user={user} signOut={signOut}/></>);
+  // `key={user.id}` forces a clean remount of every hook (drafts, settings,
+  // calendar, etc.) when the user changes — defensive guard so one user's
+  // in-memory state never carries over to the next.
+  return (<>{showShimmer&&<div className="page-shimmer"/>}<AuthenticatedApp key={user.id} user={user} signOut={signOut}/></>);
 }
 
 // All the dashboard hooks/logic live here, only mounted when user is authenticated.
@@ -2936,15 +2939,20 @@ function AuthenticatedApp({user,signOut}){
   const[showSettings,setShowSettings]=useState(false);
   const[rangeId,setRangeId]=useState("24h");
   const[compareMode,setCompareMode]=useState("previous");
+  // Drafts (posts/thread/article/tone) live in localStorage so they survive a
+  // refresh. Scope the key by user.id so multiple users on the same browser
+  // never see each other's in-progress drafts.
+  const contentStateKey=`honoroll_content_state_${user?.id||"anon"}`;
   const[contentState,setContentState]=useState(()=>{
-    // Drop legacy calendar (now stored in Supabase). Keep transient drafts in localStorage.
-    try{const s=typeof localStorage!=="undefined"?localStorage.getItem("honoroll_content_state"):null;
+    try{const s=typeof localStorage!=="undefined"?localStorage.getItem(contentStateKey):null;
       const parsed=s?JSON.parse(s):null;
       if(parsed){const{calendar,...rest}=parsed;return {posts:null,thread:null,article:null,tone:"founder",...rest};}
       return {posts:null,thread:null,article:null,tone:"founder"};
     }catch(e){return{posts:null,thread:null,article:null,tone:"founder"};}
   });
-  useEffect(()=>{try{if(typeof localStorage!=="undefined")localStorage.setItem("honoroll_content_state",JSON.stringify(contentState));}catch(e){}},[contentState]);
+  useEffect(()=>{try{if(typeof localStorage!=="undefined")localStorage.setItem(contentStateKey,JSON.stringify(contentState));}catch(e){}},[contentState,contentStateKey]);
+  // One-time cleanup of the legacy unscoped key (predates the multi-user fix)
+  useEffect(()=>{try{if(typeof localStorage!=="undefined")localStorage.removeItem("honoroll_content_state");}catch(e){}},[]);
   // Brand assets now in Supabase + Storage (per user)
   const brandAssets=useBrandAssets(user);
   // One-time cleanup of old localStorage entry
