@@ -877,11 +877,29 @@ const Dashboard=({cfg,site,useMock,onSettings,rangeId,onRangeChange,compareMode,
     {(data.pageSpeed||data.seoAudit||data.siteHealthError)&&<SectionCard accent={SECTION_COLORS.health}>
       <Heading eyebrow="Site Health" accent={SECTION_COLORS.health} desc="Google Lighthouse via PageSpeed Insights. Current state, refreshed once per day.">Performance & SEO</Heading>
       {(data.pageSpeed||data.seoAudit)?<SiteHealth pagespeed={data.pageSpeed} seoscore={data.seoAudit}/>
-      :<div style={{background:C.redSoft,border:`1px solid ${C.redBdr}`,borderRadius:12,padding:`${S.lg}px ${S.xl}px`,fontSize:T.body,color:C.red}}>
-        <div style={{fontWeight:600,marginBottom:S.xs}}>Site Health unavailable</div>
-        <div style={{fontSize:T.caption,color:C.text,lineHeight:1.5}}>{data.siteHealthError}</div>
-        <div style={{fontSize:T.caption-1,color:C.dim,marginTop:S.sm,fontFamily:mono}}>Common causes: PageSpeed timing out, Google quota exhausted, or the domain unreachable from Lighthouse.</div>
-      </div>}
+      :(()=>{
+        // Translate technical error patterns into human-friendly headlines + hints
+        const raw=String(data.siteHealthError||"");
+        const isLighthouseFlake=/FAILED_DOCUMENT_REQUEST|ERRORED_DOCUMENT_REQUEST|NO_DOCUMENT_REQUEST|NO_FCP|NO_LCP|PROTOCOL_TIMEOUT|UNKNOWN_ERROR|LIGHTHOUSE_ERROR/i.test(raw);
+        const isQuota=/quota|rate.?limit|429/i.test(raw);
+        const isTimeout=/timed?\s?out|504|FUNCTION_INVOCATION_TIMEOUT/i.test(raw);
+        const isDns=/DNS_FAILURE|ENOTFOUND|getaddrinfo/i.test(raw);
+        const headline=isQuota?"Lighthouse quota reached for today":isDns?"Domain could not be resolved":isTimeout?"Lighthouse timed out":isLighthouseFlake?"Lighthouse had trouble loading your site":"Site Health temporarily unavailable";
+        const hint=isQuota?"Google's free PageSpeed tier is rate-limited. The check will run automatically tomorrow.":isDns?"Check Settings → Site → Domain. Use the bare domain (no https://) of a publicly accessible site.":isTimeout?"PageSpeed runs are usually 15–30s. A network blip can push them past the timeout. Hit Refresh in a minute or two.":isLighthouseFlake?"This is usually transient — Lighthouse occasionally fails to load a page on the first try, especially behind Cloudflare or other bot protection. Click Refresh below to try again.":"This is usually transient. Try refreshing in a minute.";
+        return (<div style={{background:C.accentSoft,border:`1px solid ${C.accentBdr}`,borderRadius:12,padding:`${S.lg}px ${S.xl}px`}}>
+          <div style={{display:"flex",alignItems:"flex-start",gap:S.md}}>
+            <span style={{fontSize:18,color:C.accent,lineHeight:1.2}}>⚠</span>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:T.body,fontWeight:600,color:C.accent,marginBottom:S.xs}}>{headline}</div>
+              <div style={{fontSize:T.caption,color:C.text,lineHeight:1.55,marginBottom:S.md}}>{hint}</div>
+              <div style={{display:"flex",gap:S.sm,alignItems:"center",flexWrap:"wrap"}}>
+                <button onClick={()=>{try{localStorage.removeItem(`honoroll_pagespeed_${site.domain}`);}catch(e){}handleRefresh();}} style={{padding:`${S.sm-1}px ${S.md+2}px`,fontSize:T.caption,fontFamily:font,fontWeight:600,color:C.bg,background:`linear-gradient(135deg,${C.accent},${C.accentBright})`,border:"none",borderRadius:8,cursor:"pointer"}}>↻ Retry now</button>
+                <span style={{fontSize:T.eyebrow,fontFamily:mono,color:C.dim,textTransform:"uppercase",letterSpacing:"0.08em"}}>The rest of the dashboard is unaffected</span>
+              </div>
+            </div>
+          </div>
+        </div>);
+      })()}
     </SectionCard>}
 
     {/* Sticky range bar — controls everything below */}
