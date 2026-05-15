@@ -124,10 +124,10 @@ const HonorollMark=({size=32,radius=10,glow=true})=>(<span style={{display:"inli
   </svg>
 </span>);
 
-// Subtle radial wash placed behind a page's top section to anchor brand color.
-// Inset horizontally by the page padding so the gradient stays inside the
-// card column instead of bleeding into the page gutter.
-const PageBackdrop=({color})=>(<div aria-hidden="true" style={{position:"absolute",top:0,left:S.xxl-4,right:S.xxl-4,height:200,borderRadius:16,background:`radial-gradient(circle at 18% 30%, ${color||"rgba(217,170,90,0.06)"}, transparent 55%)`,pointerEvents:"none",zIndex:0}}/>);
+// PageBackdrop intentionally renders nothing in the minimalist treatment —
+// page identity comes from the SectionCard system + the gold-only header
+// logo, no radial wash needed. Kept as a component so call sites keep working.
+const PageBackdrop=()=>null;
 
 // ─── Security helpers ────────────────────────────────────────────────────────
 // Fetch wrapper that attaches the current Supabase access token to every
@@ -342,24 +342,29 @@ function useAnalyticsData(cfg,site,rangeId,compareMode) {
 // ─── Shared UI Components ────────────────────────────────────────────────────
 const Tip=({active,payload,label})=>{if(!active||!payload?.length)return null;return (<div style={{background:"rgba(22,26,32,0.94)",backdropFilter:"blur(10px)",WebkitBackdropFilter:"blur(10px)",border:`1px solid ${C.borderStrong}`,borderRadius:10,padding:`${S.md-2}px ${S.lg-2}px`,fontSize:T.caption,fontFamily:mono,boxShadow:"0 8px 24px rgba(0,0,0,0.4)"}}><div style={{color:C.muted,marginBottom:S.sm-2,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em",fontSize:T.eyebrow}}>{label}</div>{payload.map((p,i)=>(<div key={i} style={{color:p.color,marginBottom:S.xs/2,display:"flex",alignItems:"center",gap:S.sm}} className="tabnum"><span style={{width:8,height:8,borderRadius:"50%",background:p.color}}/><span style={{color:C.text}}>{p.name}:</span><span style={{fontWeight:600,color:C.bright,marginLeft:"auto"}}>{fmt(p.value)}</span></div>))}</div>);};
 const Dot=({color})=><span style={{display:"inline-block",width:8,height:8,borderRadius:"50%",background:color,marginRight:S.xs+2,verticalAlign:"middle"}}/>;
-// Small uppercase tracked label — sits ABOVE a heading or in a card corner
-const Eyebrow=({children,color})=>(<div style={{fontSize:T.eyebrow,fontWeight:600,color:color||C.muted,textTransform:"uppercase",letterSpacing:"0.10em",fontFamily:font}}>{children}</div>);
+// Small uppercase tracked label — sits ABOVE a heading or in a card corner.
+// Color prop accepted for backward-compat with existing call sites but ignored:
+// in the minimalist treatment, eyebrows always render in the muted token so
+// category colors do not compete with semantic colors elsewhere.
+const Eyebrow=({children})=>(<div style={{fontSize:T.eyebrow,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.10em",fontFamily:font}}>{children}</div>);
 
 // Section heading: large bright H2 + optional description + optional eyebrow.
-// Designed to sit inside a SectionCard; pass `inline` to use outside cards.
-const Heading=({children,desc,eyebrow,accent,inline})=>(<div style={{marginBottom:inline?S.lg:S.lg,marginTop:inline?S.sm:0}}>
-  {eyebrow&&<div style={{marginBottom:S.xs}}><Eyebrow color={accent||C.muted}>{eyebrow}</Eyebrow></div>}
+// The `accent` prop is accepted for backward-compat but no longer renders a
+// colored underline — sections rely on the SectionCard border + spacing alone.
+const Heading=({children,desc,eyebrow,inline})=>(<div style={{marginBottom:inline?S.lg:S.lg,marginTop:inline?S.sm:0}}>
+  {eyebrow&&<div style={{marginBottom:S.xs}}><Eyebrow>{eyebrow}</Eyebrow></div>}
   <div style={{fontSize:T.h2,fontWeight:600,color:C.bright,letterSpacing:"-0.01em",lineHeight:1.2,fontFamily:font}}>{children}</div>
-  {accent&&<div style={{width:40,height:2,borderRadius:1,background:accent,marginTop:S.sm,opacity:0.7}}/>}
   {desc&&<div style={{fontSize:T.caption,color:C.dim,marginTop:S.sm,lineHeight:1.55,maxWidth:680}}>{desc}</div>}
 </div>);
 
-// SectionCard — every major page section sits inside one of these. Optional
-// `accent` paints a 3px gradient stripe across the top edge for category color.
-const SectionCard=({children,accent,style,inset,padding,...rest})=>{
+// SectionCard — every major page section sits inside one of these. The
+// `accent` prop is accepted for backward-compat but no longer renders a stripe;
+// the card relies on its border + spacing alone in the minimalist treatment.
+const SectionCard=({children,style,inset,padding,...rest})=>{
   const pad=padding||S.xl+S.xs; // 28px default
-  return (<section {...rest} style={{position:"relative",background:inset?C.surfaceInset:C.surface,border:`1px solid ${C.border}`,borderRadius:16,padding:pad,marginBottom:S.xxxl,...(style||{})}}>
-    {accent&&<div className="accent-stripe" style={{background:`linear-gradient(90deg,${accent} 0%,${accent} 30%,transparent 100%)`,opacity:0.8}}/>}
+  // Pull `accent` out of rest so it doesn't propagate to the DOM
+  const{accent,...domRest}=rest;
+  return (<section {...domRest} style={{position:"relative",background:inset?C.surfaceInset:C.surface,border:`1px solid ${C.border}`,borderRadius:16,padding:pad,marginBottom:S.xxxl,...(style||{})}}>
     {children}
   </section>);
 };
@@ -1072,7 +1077,7 @@ const CopyBtn=({text,label,onCopied})=>{const[copied,setCopied]=useState(false);
   }catch(e){fallback();}
   function fallback(){const ta=document.createElement("textarea");ta.value=text;ta.style.cssText="position:fixed;left:-9999px;top:-9999px";document.body.appendChild(ta);ta.select();try{document.execCommand("copy");setCopied(true);if(onCopied)onCopied();setTimeout(()=>setCopied(false),2000);}catch(e){}document.body.removeChild(ta);}
 };return <button onClick={copy} style={{fontSize:T.caption-1,fontFamily:mono,fontWeight:500,color:copied?C.green:C.muted,background:copied?C.greenSoft:C.surfaceElevated,border:`1px solid ${copied?C.greenBdr:C.border}`,borderRadius:6,padding:`${S.xs+1}px ${S.md-2}px`,cursor:"pointer",transition:"all 0.2s",display:"inline-flex",alignItems:"center",gap:S.xs}}>{copied?"✓ Copied":(label||"Copy")}</button>;};
-const DraftBadge=()=> <span style={{display:"inline-flex",alignItems:"center",gap:S.xs,fontSize:T.eyebrow,fontWeight:700,fontFamily:mono,color:C.accent,textTransform:"uppercase",letterSpacing:"0.10em",padding:`${S.xs-1}px ${S.sm+1}px`,background:C.accentSoft,border:`1px solid ${C.accentBdr}`,borderRadius:5}}><span style={{width:5,height:5,borderRadius:"50%",background:C.accent}}/>Draft</span>;
+const DraftBadge=()=> <span style={{display:"inline-flex",alignItems:"center",gap:S.xs,fontSize:T.eyebrow,fontWeight:700,fontFamily:mono,color:C.muted,textTransform:"uppercase",letterSpacing:"0.10em",padding:`${S.xs-1}px ${S.sm+1}px`,background:C.surfaceInset,border:`1px solid ${C.border}`,borderRadius:5}}><span style={{width:5,height:5,borderRadius:"50%",background:C.muted}}/>Draft</span>;
 const ScheduledBadge=()=> <span style={{display:"inline-flex",alignItems:"center",gap:S.xs,fontSize:T.eyebrow,fontWeight:700,fontFamily:mono,color:C.green,textTransform:"uppercase",letterSpacing:"0.10em",padding:`${S.xs-1}px ${S.sm+1}px`,background:C.greenSoft,border:`1px solid ${C.greenBdr}`,borderRadius:5}}><span style={{width:5,height:5,borderRadius:"50%",background:C.green}}/>Scheduled</span>;
 const CharCount=({n})=> {const over=n>280;const near=n>240;return <span className="tabnum" style={{fontSize:T.eyebrow+1,fontFamily:mono,fontWeight:over?700:500,color:over?C.red:near?C.accent:C.dim,padding:`${S.xs-1}px ${S.sm}px`,background:over?C.redSoft:"transparent",borderRadius:4}}>{n}/280</span>;};
 
@@ -2270,7 +2275,7 @@ const SettingsPage=({ctxFiles,brandAssets,defaults,onUpdateDefaults,saveState})=
     <div style={{display:"grid",gridTemplateColumns:"240px 1fr",gap:S.xxl,alignItems:"flex-start"}}>
       {/* Sub-nav */}
       <nav style={{display:"flex",flexDirection:"column",gap:S.xs+1,position:"sticky",top:88,background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,padding:S.sm+2}}>
-        {SETTINGS_SECTIONS.map(s=>{const isActive=section===s.id;const color=SECTION_COLORS[s.id]||C.accent;
+        {SETTINGS_SECTIONS.map(s=>{const isActive=section===s.id;const color=C.accent;
           return (<button key={s.id} onClick={()=>setSection(s.id)} style={{textAlign:"left",padding:`${S.md-2}px ${S.md+2}px`,fontSize:T.small,fontWeight:isActive?600:500,fontFamily:font,color:isActive?C.bright:C.muted,background:isActive?`${color}1A`:"transparent",border:isActive?`1px solid ${color}55`:`1px solid transparent`,borderLeft:isActive?`3px solid ${color}`:"3px solid transparent",borderRadius:8,cursor:"pointer",display:"block",transition:"all 0.15s"}}>
             <div style={{whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{s.label}</div>
             <div style={{fontSize:T.eyebrow,color:C.dim,marginTop:S.xs/2,fontWeight:400,whiteSpace:"normal",lineHeight:1.4}}>{s.desc}</div>
