@@ -1230,18 +1230,22 @@ const ymd=(d)=>{const y=d.getFullYear();const m=String(d.getMonth()+1).padStart(
 // Native browser date picker — no custom popup, no stacking-context issues.
 // The hidden <input type="date"> is anchored to the button via a relative wrapper;
 // clicking the button calls showPicker() to open the browser's calendar.
-const ScheduleBtn=({onSchedule,scheduledDate})=>{
+// Scheduling window: today through one month ahead (matches the calendar's
+// reach). `label` overridable so the same control reads "Schedule" on a draft
+// and "Reschedule" on an already-scheduled entry.
+const ScheduleBtn=({onSchedule,scheduledDate,labelOverride})=>{
   const inputRef=React.useRef(null);
   const todayStr=ymd(new Date());
+  const maxD=new Date();maxD.setMonth(maxD.getMonth()+1);const maxStr=ymd(maxD);
   const openPicker=()=>{
     const el=inputRef.current;if(!el)return;
     if(typeof el.showPicker==="function"){try{el.showPicker();return;}catch(e){}}
     el.focus();el.click();
   };
-  const label=scheduledDate?`Scheduled · ${scheduledDate}`:"Schedule";
+  const label=labelOverride||(scheduledDate?`Scheduled · ${scheduledDate}`:"Schedule");
   return (<span style={{position:"relative",display:"inline-block"}}>
     <button onClick={openPicker} style={{fontSize:11,fontFamily:mono,color:scheduledDate?C.green:C.accent,background:scheduledDate?C.greenSoft:"none",border:`1px solid ${scheduledDate?C.greenBdr:C.accentSoft}`,borderRadius:6,padding:"4px 10px",cursor:"pointer"}}>📅 {label}</button>
-    <input ref={inputRef} type="date" min={todayStr} defaultValue={scheduledDate||""} onChange={(e)=>{if(e.target.value)onSchedule(e.target.value);}} style={{position:"absolute",left:0,top:"100%",width:1,height:1,opacity:0,pointerEvents:"none"}}/>
+    <input ref={inputRef} type="date" min={todayStr} max={maxStr} defaultValue={scheduledDate||""} onChange={(e)=>{if(e.target.value)onSchedule(e.target.value);}} style={{position:"absolute",left:0,top:"100%",width:1,height:1,opacity:0,pointerEvents:"none"}}/>
   </span>);
 };
 
@@ -1746,23 +1750,33 @@ const BrandAssetsPanel=({brandAssets,show,onToggle,hideClose})=>{
 const ContentCalendar=({history,onUpdateEntry,onDeleteEntry,onUploadImage})=>{
   const[view,setView]=useState("week");
   const[preview,setPreview]=useState(null);
+  // monthOffset: 0 = current calendar month, 1 = next month. Scheduling reaches
+  // at most one month out, so the view never needs to page beyond next month.
+  const[monthOffset,setMonthOffset]=useState(0);
   const today=new Date();const dayNames=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
   const monthNames=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
   const days=[];
+  const viewYear=today.getFullYear();const viewMonth=today.getMonth()+monthOffset;
+  const viewMonthDate=new Date(viewYear,viewMonth,1);
   if(view==="week"){
     // Show today + next 6 days (rolling week) — aligns with content scheduling needs
     for(let i=0;i<7;i++){const d=new Date(today);d.setDate(today.getDate()+i);days.push(d);}
   }
-  else{const first=new Date(today.getFullYear(),today.getMonth(),1);const last=new Date(today.getFullYear(),today.getMonth()+1,0);
+  else{const first=new Date(viewYear,viewMonth,1);const last=new Date(viewYear,viewMonth+1,0);
     for(let i=0;i<first.getDay();i++)days.push(null);
-    for(let i=1;i<=last.getDate();i++)days.push(new Date(today.getFullYear(),today.getMonth(),i));}
+    for(let i=1;i<=last.getDate();i++)days.push(new Date(viewYear,viewMonth,i));}
   const totalP=history.filter(h=>h.type==="post").length;const totalT=history.filter(h=>h.type==="thread").length;const totalA=history.filter(h=>h.type==="article").length;
   const cycleStatus=(entry)=>{const order=["draft","scheduled","published"];const next=order[(order.indexOf(entry.status||"draft")+1)%3];onUpdateEntry({...entry,status:next});};
+  const reschedule=(entry,date)=>{if(date)onUpdateEntry({...entry,date,status:"scheduled"});};
+  const navBtn=(dir,disabled)=>(<button onClick={()=>!disabled&&setMonthOffset(o=>Math.min(1,Math.max(0,o+dir)))} disabled={disabled} style={{width:26,height:26,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontFamily:mono,color:disabled?C.faint:C.muted,background:C.surfaceElevated,border:`1px solid ${C.border}`,borderRadius:6,cursor:disabled?"not-allowed":"pointer"}}>{dir<0?"‹":"›"}</button>);
 
   return (<div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"20px 22px",marginBottom:24}}>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:8}}>
-      <div style={{fontSize:12,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em"}}>{view==="week"?"Next 7 Days":`${monthNames[today.getMonth()]} ${today.getFullYear()}`}</div>
-      <div style={{display:"flex",gap:4}}>{["week","month"].map(v=> <button key={v} onClick={()=>setView(v)} style={{padding:"5px 14px",fontSize:11,fontFamily:font,fontWeight:view===v?600:400,color:view===v?C.bg:C.muted,background:view===v?C.accent:"rgba(200,205,211,0.04)",border:view===v?"none":`1px solid ${C.border}`,borderRadius:6,cursor:"pointer",textTransform:"capitalize"}}>{v}</button>)}</div>
+      <div style={{display:"flex",alignItems:"center",gap:8}}>
+        <div style={{fontSize:12,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em"}}>{view==="week"?"Next 7 Days":`${monthNames[viewMonthDate.getMonth()]} ${viewMonthDate.getFullYear()}`}</div>
+        {view==="month"&&<div style={{display:"flex",gap:4}}>{navBtn(-1,monthOffset<=0)}{navBtn(1,monthOffset>=1)}</div>}
+      </div>
+      <div style={{display:"flex",gap:4}}>{["week","month"].map(v=> <button key={v} onClick={()=>{setView(v);if(v==="week")setMonthOffset(0);}} style={{padding:"5px 14px",fontSize:11,fontFamily:font,fontWeight:view===v?600:400,color:view===v?C.bg:C.muted,background:view===v?C.accent:"rgba(200,205,211,0.04)",border:view===v?"none":`1px solid ${C.border}`,borderRadius:6,cursor:"pointer",textTransform:"capitalize"}}>{v}</button>)}</div>
     </div>
     {history.length>0&&<div style={{marginBottom:16}}>
       <div style={{display:"flex",height:6,borderRadius:3,overflow:"hidden",gap:2,marginBottom:8}}>
@@ -1809,6 +1823,7 @@ const ContentCalendar=({history,onUpdateEntry,onDeleteEntry,onUploadImage})=>{
         <div style={{padding:"10px 18px",display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
           <CopyBtn text={entry.fullText||entry.preview} label="Copy for X" onCopied={()=>onUpdateEntry({...entry,status:"published"})}/>
           {entry.type==="thread"&&<CopyBtn text={(entry.fullText||"").split("\n\n").map(t=>t.replace(/^\d+\.\s/,"")).join("\n\n🧵\n\n")} label="Copy for Typefully"/>}
+          <ScheduleBtn onSchedule={(date)=>reschedule(entry,date)} scheduledDate={entry.date} labelOverride={entry.status==="scheduled"?`Reschedule · ${entry.date}`:`Schedule · ${entry.date}`}/>
           {entry.image&&<button onClick={()=>{const a=document.createElement("a");a.href=entry.image;a.download="honoroll-image.png";a.click();}} style={{fontSize:11,fontFamily:mono,color:C.blue,background:"none",border:`1px solid rgba(90,184,217,0.3)`,borderRadius:6,padding:"4px 10px",cursor:"pointer"}}>Download image</button>}
           <button onClick={()=>onDeleteEntry(entry.id)} style={{fontSize:11,fontFamily:mono,color:C.red,background:"none",border:`1px solid rgba(248,113,113,0.2)`,borderRadius:6,padding:"4px 10px",cursor:"pointer",marginLeft:"auto"}}>Remove</button>
         </div>
@@ -1842,11 +1857,11 @@ const CalendarImageUpload=({entry,onUpdateEntry,onUploadImage})=>{
 const ContentQueue=({items,onUpdate,onDelete})=>{
   const scheduled=items.filter(i=>i.status==="scheduled").sort((a,b)=>a.date.localeCompare(b.date));
   if(!scheduled.length) return null;
-  const QueueItem=({item})=> (<div style={{display:"flex",alignItems:"center",gap:12,padding:"10px 14px",background:"rgba(200,205,211,0.02)",borderRadius:8,border:`1px solid ${C.border}`}}>
+  const QueueItem=({item})=> (<div style={{display:"flex",alignItems:"center",gap:12,padding:"10px 14px",background:"rgba(200,205,211,0.02)",borderRadius:8,border:`1px solid ${C.border}`,flexWrap:"wrap"}}>
     <div style={{width:6,height:6,borderRadius:"50%",background:TYPE_COLORS[item.type],flexShrink:0}}/>
-    <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.preview}</div></div>
-    <span style={{fontSize:10,fontFamily:mono,color:C.dim,flexShrink:0}}>{item.date}</span>
+    <div style={{flex:1,minWidth:120}}><div style={{fontSize:12,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.preview}</div></div>
     <StatusBadge status={item.status}/>
+    <ScheduleBtn onSchedule={(date)=>{if(date)onUpdate({...item,date,status:"scheduled"});}} scheduledDate={item.date} labelOverride={`Reschedule · ${item.date}`}/>
     <CopyBtn text={item.fullText||item.preview} label="Copy" onCopied={()=>onUpdate({...item,status:"published"})}/>
     <button onClick={()=>onDelete(item.id)} title="Remove from schedule" style={{fontSize:11,fontFamily:mono,color:C.red,background:"none",border:`1px solid rgba(248,113,113,0.2)`,borderRadius:6,padding:"4px 10px",cursor:"pointer"}}>✕ Remove</button>
   </div>);
