@@ -1751,46 +1751,71 @@ const BrandAssetsPanel=({brandAssets,show,onToggle,hideClose})=>{
 // tokens — so the preview shows how the post actually renders on X. Width is
 // constrained to simulate the device: ~390px mobile, ~600px desktop timeline.
 const X_ICON=(d)=>(<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#71767B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0}}><path d={d}/></svg>);
+const X_TEXT="#E7E9EA",X_DIM="#71767B",X_BORDER="#2F3336",X_BLUE="#1D9BF0";
+// X collapses long posts in the feed behind "Show more" at ~280 displayed chars.
+const X_FEED_LIMIT=280;
+const XVerified=()=>(<svg width="15" height="15" viewBox="0 0 24 24" fill={X_BLUE} style={{flexShrink:0}}><path d="M22.25 12c0-1.43-.88-2.67-2.19-3.34.46-1.39.2-2.9-.81-3.91s-2.52-1.27-3.91-.81c-.66-1.31-1.91-2.19-3.34-2.19s-2.67.88-3.33 2.19c-1.4-.46-2.91-.2-3.92.81s-1.26 2.52-.8 3.91c-1.31.67-2.2 1.91-2.2 3.34s.89 2.67 2.2 3.34c-.46 1.39-.21 2.9.8 3.91s2.52 1.26 3.91.81c.67 1.31 1.91 2.19 3.34 2.19s2.68-.88 3.34-2.19c1.39.45 2.9.2 3.91-.81s1.27-2.52.81-3.91c1.31-.67 2.19-1.91 2.19-3.34zm-11.71 4.2L6.8 12.46l1.41-1.42 2.26 2.26 4.8-5.23 1.47 1.36-6.2 6.77z"/></svg>);
+const XEngagement=({isMobile})=>(<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:14,maxWidth:isMobile?"100%":420,color:X_DIM}}>
+  <span style={{display:"flex",alignItems:"center",gap:6,fontSize:13}}>{X_ICON("M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z")}<span>12</span></span>
+  <span style={{display:"flex",alignItems:"center",gap:6,fontSize:13}}>{X_ICON("M17 1l4 4-4 4M3 11V9a4 4 0 0 1 4-4h14M7 23l-4-4 4-4M21 13v2a4 4 0 0 1-4 4H3")}<span>8</span></span>
+  <span style={{display:"flex",alignItems:"center",gap:6,fontSize:13}}>{X_ICON("M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z")}<span>47</span></span>
+  <span style={{display:"flex",alignItems:"center",gap:6,fontSize:13}}>{X_ICON("M3 3v18h18M7 16v-5M12 16V8M17 16v-9")}<span>2.1K</span></span>
+  <span style={{display:"flex",alignItems:"center",gap:10}}>{X_ICON("M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z")}{X_ICON("M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8M16 6l-4-4-4 4M12 2v13")}</span>
+</div>);
+
+// Renders the body of one tweet with feed-style "Show more" truncation.
+const XTweetText=({text,device})=>{
+  const[expanded,setExpanded]=useState(false);
+  const tooLong=text.length>X_FEED_LIMIT;
+  const shown=tooLong&&!expanded?text.slice(0,X_FEED_LIMIT).trimEnd():text;
+  return (<div style={{fontSize:15,color:X_TEXT,lineHeight:1.4,whiteSpace:"pre-wrap",marginTop:2,wordBreak:"break-word"}}>
+    {shown}{tooLong&&!expanded&&"… "}
+    {tooLong&&<span onClick={(e)=>{e.stopPropagation();setExpanded(v=>!v);}} style={{color:X_BLUE,cursor:"pointer"}}>{expanded?" Show less":"Show more"}</span>}
+  </div>);
+};
+
+// Parse a stored thread (fullText = "1. ...\n\n2. ...") into individual tweets.
+const parseThread=(fullText)=>(fullText||"").split(/\n\n+/).map(s=>s.replace(/^\s*\d+[.)]\s*/,"").trim()).filter(Boolean);
+
 const XPostCard=({entry,device})=>{
   const isMobile=device==="mobile";
   const W=isMobile?390:600;
   const av=isMobile?40:44;
-  const txt=isMobile?15:15;
-  const body=entry.fullText||entry.preview||"";
-  const xText="#E7E9EA",xDim="#71767B",xBorder="#2F3336";
+  const tweets=entry.type==="thread"?parseThread(entry.fullText||entry.preview) : [entry.fullText||entry.preview||""];
+  if(tweets.length===0)tweets.push("");
+  const Header=()=>(<div style={{display:"flex",alignItems:"center",gap:4,flexWrap:"wrap"}}>
+    <span style={{fontSize:15,fontWeight:700,color:X_TEXT}}>Honoroll</span>
+    <XVerified/>
+    <span style={{fontSize:15,color:X_DIM}}>@honoroll · 2h</span>
+    <span style={{marginLeft:"auto",color:X_DIM,fontSize:18,lineHeight:1}}>···</span>
+  </div>);
   return (<div style={{width:"100%",maxWidth:W,transition:"max-width 0.25s ease",margin:"0 auto"}}>
-    {/* Device chrome */}
-    <div style={{borderRadius:isMobile?28:12,border:`1px solid ${xBorder}`,background:"#000",overflow:"hidden",boxShadow:"0 12px 40px rgba(0,0,0,0.5)"}}>
+    <div style={{borderRadius:isMobile?28:12,border:`1px solid ${X_BORDER}`,background:"#000",overflow:"hidden",boxShadow:"0 12px 40px rgba(0,0,0,0.5)"}}>
       {/* faux device top bar */}
-      <div style={{height:isMobile?28:32,background:"#0A0A0A",borderBottom:`1px solid ${xBorder}`,display:"flex",alignItems:"center",justifyContent:isMobile?"center":"flex-start",gap:6,padding:"0 14px"}}>
+      <div style={{height:isMobile?28:32,background:"#0A0A0A",borderBottom:`1px solid ${X_BORDER}`,display:"flex",alignItems:"center",justifyContent:isMobile?"center":"flex-start",gap:6,padding:"0 14px"}}>
         {isMobile
           ? <div style={{width:42,height:5,borderRadius:3,background:"#2F3336"}}/>
-          : <>{["#FF5F57","#FEBC2E","#28C840"].map(c=> <span key={c} style={{width:10,height:10,borderRadius:"50%",background:c}}/>)}<span style={{marginLeft:10,fontSize:10,color:xDim,fontFamily:mono}}>x.com</span></>}
+          : <>{["#FF5F57","#FEBC2E","#28C840"].map(c=> <span key={c} style={{width:10,height:10,borderRadius:"50%",background:c}}/>)}<span style={{marginLeft:10,fontSize:10,color:X_DIM,fontFamily:mono}}>x.com</span></>}
       </div>
-      {/* X post */}
+      {/* tweet(s) */}
       <div style={{padding:isMobile?"12px 14px":"14px 16px",fontFamily:font}}>
-        <div style={{display:"flex",gap:12}}>
-          <div style={{width:av,height:av,borderRadius:"50%",background:`linear-gradient(135deg,${C.accent},${C.accentBright})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:av*0.45,fontWeight:800,color:"#000",flexShrink:0}}>H</div>
-          <div style={{flex:1,minWidth:0}}>
-            <div style={{display:"flex",alignItems:"center",gap:4,flexWrap:"wrap"}}>
-              <span style={{fontSize:15,fontWeight:700,color:xText}}>Honoroll</span>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="#1D9BF0" style={{flexShrink:0}}><path d="M22.25 12c0-1.43-.88-2.67-2.19-3.34.46-1.39.2-2.9-.81-3.91s-2.52-1.27-3.91-.81c-.66-1.31-1.91-2.19-3.34-2.19s-2.67.88-3.33 2.19c-1.4-.46-2.91-.2-3.92.81s-1.26 2.52-.8 3.91c-1.31.67-2.2 1.91-2.2 3.34s.89 2.67 2.2 3.34c-.46 1.39-.21 2.9.8 3.91s2.52 1.26 3.91.81c.67 1.31 1.91 2.19 3.34 2.19s2.68-.88 3.34-2.19c1.39.45 2.9.2 3.91-.81s1.27-2.52.81-3.91c1.31-.67 2.19-1.91 2.19-3.34zm-11.71 4.2L6.8 12.46l1.41-1.42 2.26 2.26 4.8-5.23 1.47 1.36-6.2 6.77z"/></svg>
-              <span style={{fontSize:15,color:xDim}}>@honoroll · 2h</span>
-              <span style={{marginLeft:"auto",color:xDim,fontSize:18,lineHeight:1}}>···</span>
+        {tweets.map((tw,idx)=>{const isLast=idx===tweets.length-1;
+          return (<div key={idx} style={{display:"flex",gap:12}}>
+            {/* avatar column + thread connector */}
+            <div style={{display:"flex",flexDirection:"column",alignItems:"center",flexShrink:0}}>
+              <div style={{width:av,height:av,borderRadius:"50%",background:`linear-gradient(135deg,${C.accent},${C.accentBright})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:av*0.45,fontWeight:800,color:"#000"}}>H</div>
+              {!isLast&&<div style={{flex:1,width:2,background:X_BORDER,marginTop:4}}/>}
             </div>
-            <div style={{fontSize:txt,color:xText,lineHeight:1.4,whiteSpace:"pre-wrap",marginTop:2,wordBreak:"break-word"}}>{body}</div>
-            {entry.image&&<div style={{marginTop:12,borderRadius:16,overflow:"hidden",border:`1px solid ${xBorder}`}}>
-              <img src={entry.image} alt="" style={{width:"100%",display:"block",maxHeight:isMobile?280:360,objectFit:"cover"}}/>
-            </div>}
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:14,maxWidth:isMobile?"100%":420,color:xDim}}>
-              <span style={{display:"flex",alignItems:"center",gap:6,fontSize:13}}>{X_ICON("M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z")}<span>12</span></span>
-              <span style={{display:"flex",alignItems:"center",gap:6,fontSize:13}}>{X_ICON("M17 1l4 4-4 4M3 11V9a4 4 0 0 1 4-4h14M7 23l-4-4 4-4M21 13v2a4 4 0 0 1-4 4H3")}<span>8</span></span>
-              <span style={{display:"flex",alignItems:"center",gap:6,fontSize:13}}>{X_ICON("M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z")}<span>47</span></span>
-              <span style={{display:"flex",alignItems:"center",gap:6,fontSize:13}}>{X_ICON("M3 3v18h18M7 16v-5M12 16V8M17 16v-9")}<span>2.1K</span></span>
-              <span style={{display:"flex",alignItems:"center",gap:10}}>{X_ICON("M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z")}{X_ICON("M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8M16 6l-4-4-4 4M12 2v13")}</span>
+            <div style={{flex:1,minWidth:0,paddingBottom:isLast?0:16}}>
+              <Header/>
+              <XTweetText text={tw} device={device}/>
+              {idx===0&&entry.image&&<div style={{marginTop:12,borderRadius:16,overflow:"hidden",border:`1px solid ${X_BORDER}`}}>
+                <img src={entry.image} alt="" style={{width:"100%",display:"block",maxHeight:isMobile?280:360,objectFit:"cover"}}/>
+              </div>}
+              <XEngagement isMobile={isMobile}/>
             </div>
-          </div>
-        </div>
+          </div>);
+        })}
       </div>
     </div>
   </div>);
