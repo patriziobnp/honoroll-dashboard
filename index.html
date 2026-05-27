@@ -1821,8 +1821,43 @@ const XPostCard=({entry,device})=>{
   </div>);
 };
 
+// Post a single tweet (optionally with image) directly to X. Two-step confirm
+// because publishing is public + irreversible. Single posts only — threads /
+// articles keep manual copy-paste for now.
+const PostToXBtn=({entry,onUpdateEntry,signImagePath})=>{
+  const[state,setState]=useState("idle"); // idle | confirm | posting | error
+  const[err,setErr]=useState("");
+  const alreadyPosted=!!entry.postedUrl;
+  const doPost=async()=>{
+    setState("posting");setErr("");
+    try{
+      let mediaUrl=null;
+      if(entry.imagePath&&!entry.imagePath.startsWith("data:")&&!entry.imagePath.startsWith("http")){
+        // Re-sign the storage path so the proxy always gets a fresh, unexpired URL
+        mediaUrl=signImagePath?await signImagePath(entry.imagePath):entry.image;
+      }else if(entry.image){mediaUrl=entry.image;}
+      const res=await authedFetch("/api/x-post",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({text:entry.fullText||entry.preview,mediaUrl})});
+      let j={};try{j=await res.json();}catch(e){}
+      if(!res.ok)throw new Error(j.error||`Post failed (${res.status})`);
+      onUpdateEntry({...entry,status:"published",postedUrl:j.url||null,postedAt:Date.now()});
+      setState("idle");
+    }catch(e){setErr(e.message||"Failed to post");setState("error");}
+  };
+  if(alreadyPosted)return (<a href={entry.postedUrl} target="_blank" rel="noopener noreferrer" style={{display:"inline-flex",alignItems:"center",gap:S.xs,fontSize:T.caption-1,fontFamily:mono,fontWeight:600,color:C.green,background:C.greenSoft,border:`1px solid ${C.greenBdr}`,borderRadius:6,padding:`${S.xs+1}px ${S.md-2}px`,textDecoration:"none"}}>✓ Posted · View on X ↗</a>);
+  if(state==="posting")return (<button disabled style={{display:"inline-flex",alignItems:"center",gap:S.xs,fontSize:T.caption-1,fontFamily:mono,color:C.muted,background:C.surfaceElevated,border:`1px solid ${C.border}`,borderRadius:6,padding:`${S.xs+1}px ${S.md-2}px`,cursor:"not-allowed"}}>{[0,1,2].map(i=>(<span key={i} style={{width:4,height:4,borderRadius:"50%",background:C.muted,animation:`pulse 1.2s ease-in-out ${i*0.2}s infinite`}}/>))}<span style={{marginLeft:S.xs}}>Posting…</span></button>);
+  if(state==="confirm")return (<span style={{display:"inline-flex",alignItems:"center",gap:S.sm,flexWrap:"wrap"}}>
+    <span style={{fontSize:T.caption-1,color:C.accent,fontFamily:mono}}>Post now to X? This is public &amp; immediate.</span>
+    <button onClick={()=>setState("idle")} style={{fontSize:T.caption-1,fontFamily:mono,color:C.muted,background:"none",border:`1px solid ${C.border}`,borderRadius:6,padding:`${S.xs+1}px ${S.md-2}px`,cursor:"pointer"}}>Cancel</button>
+    <button onClick={doPost} style={{fontSize:T.caption-1,fontFamily:mono,fontWeight:600,color:C.bg,background:`linear-gradient(135deg,${C.accent},${C.accentBright})`,border:"none",borderRadius:6,padding:`${S.xs+1}px ${S.md-2}px`,cursor:"pointer"}}>Yes, post</button>
+  </span>);
+  return (<span style={{display:"inline-flex",alignItems:"center",gap:S.sm}}>
+    <button onClick={()=>setState("confirm")} style={{fontSize:T.caption-1,fontFamily:mono,fontWeight:600,color:C.bright,background:C.surfaceElevated,border:`1px solid ${C.borderStrong}`,borderRadius:6,padding:`${S.xs+1}px ${S.md-2}px`,cursor:"pointer"}}>𝕏 Post to X</button>
+    {state==="error"&&<span style={{fontSize:T.eyebrow,color:C.red,fontFamily:mono,maxWidth:280}}>{err}</span>}
+  </span>);
+};
+
 // ─── Content Calendar (Enhanced with Preview) ────────────────────────────────
-const ContentCalendar=({history,onUpdateEntry,onDeleteEntry,onUploadImage})=>{
+const ContentCalendar=({history,onUpdateEntry,onDeleteEntry,onUploadImage,signImagePath})=>{
   const[view,setView]=useState("week");
   const[preview,setPreview]=useState(null);
   const[device,setDevice]=useState("desktop"); // mobile | desktop — X preview
@@ -1889,6 +1924,7 @@ const ContentCalendar=({history,onUpdateEntry,onDeleteEntry,onUploadImage})=>{
           : <div style={{maxWidth:device==="mobile"?390:600,margin:`${S.sm}px auto 0`,textAlign:"right"}}><button onClick={()=>onUpdateEntry({...entry,image:null,imagePath:null})} style={{fontSize:T.caption-1,fontFamily:mono,color:C.red,background:"none",border:`1px solid ${C.redBdr}`,borderRadius:6,padding:`${S.xs+1}px ${S.md-2}px`,cursor:"pointer"}}>✕ Remove image</button></div>}
         {/* Export / schedule actions */}
         <div style={{display:"flex",gap:S.sm,flexWrap:"wrap",alignItems:"center",marginTop:S.lg,paddingTop:S.lg,borderTop:`1px solid ${C.border}`}}>
+          {entry.type==="post"&&<PostToXBtn entry={entry} onUpdateEntry={onUpdateEntry} signImagePath={signImagePath}/>}
           <CopyBtn text={entry.fullText||entry.preview} label="Copy for X" onCopied={()=>onUpdateEntry({...entry,status:"published"})}/>
           {entry.type==="thread"&&<CopyBtn text={(entry.fullText||"").split("\n\n").map(t=>t.replace(/^\d+\.\s/,"")).join("\n\n🧵\n\n")} label="Copy for Typefully"/>}
           <ScheduleBtn onSchedule={(date)=>reschedule(entry,date)} scheduledDate={entry.date} labelOverride={entry.status==="scheduled"?`Reschedule · ${entry.date}`:`Schedule · ${entry.date}`}/>
@@ -2082,7 +2118,7 @@ const ContentPage=({analyticsData,contentState,setContentState,contextFiles,defa
     topicTimerRef.current=setTimeout(()=>{if(onUpdateDefaults)onUpdateDefaults({contentTopic:next});},500);
   };
   const{posts,thread,article}=contentState;
-  const{entries:calendar,loading:calendarLoading,error:calendarError,addEntry,scheduleEntry,updateEntry,deleteEntry,uploadCalendarImage}=calendarEntries;
+  const{entries:calendar,loading:calendarLoading,error:calendarError,addEntry,scheduleEntry,updateEntry,deleteEntry,uploadCalendarImage,signImagePath}=calendarEntries;
   const setPosts=(p)=>setContentState(s=>({...s,posts:p}));
   const setThread=(t)=>setContentState(s=>({...s,thread:t}));
   const setArticle=(a)=>setContentState(s=>({...s,article:a}));
@@ -2142,7 +2178,7 @@ const ContentPage=({analyticsData,contentState,setContentState,contextFiles,defa
     {/* Calendar */}
     <SectionCard accent={SECTION_COLORS.calendar}>
       <Heading eyebrow="Calendar" accent={SECTION_COLORS.calendar} desc="Track content, schedule posts, preview before publishing.">Content calendar</Heading>
-      <ContentCalendar history={calendar} onUpdateEntry={updateCalendarEntry} onDeleteEntry={deleteCalendarEntry} onUploadImage={uploadCalendarImage}/>
+      <ContentCalendar history={calendar} onUpdateEntry={updateCalendarEntry} onDeleteEntry={deleteCalendarEntry} onUploadImage={uploadCalendarImage} signImagePath={signImagePath}/>
     </SectionCard>
 
     {/* Queue */}
@@ -2877,6 +2913,8 @@ const rowToCalendarEntry=(r,signedUrl)=>{
     imagePath:raw,
     date:r.date,
     status:r.status,
+    postedUrl:r.posted_url||null,
+    postedAt:r.posted_at?new Date(r.posted_at).getTime():null,
     createdAt:r.created_at?new Date(r.created_at).getTime():Date.now(),
   };
 };
@@ -2992,6 +3030,8 @@ const useCalendarEntries=(user)=>{
       image_path:updated.imagePath||null,
       date:updated.date,
       status:updated.status,
+      posted_url:updated.postedUrl||null,
+      posted_at:updated.postedAt?new Date(updated.postedAt).toISOString():null,
     }).eq("id",updated.id).select().single();
     if(e)throw e;
     // If imagePath changed and old one was a Storage path, clean it up
@@ -3012,7 +3052,7 @@ const useCalendarEntries=(user)=>{
     setEntries(es=>es.filter(x=>x.id!==id));
   };
 
-  return {entries,loading,error,addEntry,scheduleEntry,updateEntry,deleteEntry,uploadCalendarImage};
+  return {entries,loading,error,addEntry,scheduleEntry,updateEntry,deleteEntry,uploadCalendarImage,signImagePath:getSignedUrlForPath};
 };
 
 // ─── Data: useUtmLinks hook (Supabase) ───────────────────────────────────────
