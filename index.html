@@ -841,9 +841,7 @@ const Dashboard=({cfg,site,useMock,onSettings,rangeId,onRangeChange,compareMode,
     {/* Top header: site name + active visitors */}
     <div style={{position:"relative",zIndex:1,display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:S.xxxl,paddingBottom:S.xl,borderBottom:`1px solid ${C.border}`,flexWrap:"wrap",gap:S.lg}}>
       <div>
-        <div style={{marginBottom:S.xs}}><Eyebrow color={C.accent}>Analytics</Eyebrow></div>
-        <h1 style={{fontFamily:font,fontSize:T.display,fontWeight:700,color:C.bright,letterSpacing:"-0.02em",margin:0,lineHeight:1.05}}>{site.name}</h1>
-        <div style={{fontSize:T.small,color:C.muted,marginTop:S.sm,fontFamily:mono}}>{site.domain}</div>
+        <h1 style={{fontFamily:font,fontSize:T.display,fontWeight:700,color:C.bright,letterSpacing:"-0.02em",margin:0,lineHeight:1.05}}>Analytics</h1>
       </div>
       <div style={{display:"flex",alignItems:"center",gap:S.sm,flexWrap:"wrap"}}>
         {useMock&&<span title="Analytics data is mocked. Toggle in Settings → Site → Mock data mode." style={{display:"inline-flex",alignItems:"center",gap:S.xs,background:C.accentSoft,border:`1px solid ${C.accentBdr}`,borderRadius:10,padding:`${S.sm}px ${S.lg}px`,fontSize:T.small,color:C.accent,fontWeight:600,fontFamily:mono}}>
