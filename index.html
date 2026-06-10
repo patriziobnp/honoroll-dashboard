@@ -845,9 +845,15 @@ const Dashboard=({cfg,site,useMock,onSettings,rangeId,onRangeChange,compareMode,
         <h1 style={{fontFamily:font,fontSize:T.display,fontWeight:700,color:C.bright,letterSpacing:"-0.02em",margin:0,lineHeight:1.05}}>{site.name}</h1>
         <div style={{fontSize:T.small,color:C.muted,marginTop:S.sm,fontFamily:mono}}>{site.domain}</div>
       </div>
-      <div style={{display:"flex",alignItems:"center",gap:S.sm,background:C.greenSoft,border:`1px solid ${C.greenBdr}`,borderRadius:10,padding:`${S.sm}px ${S.lg}px`,fontSize:T.small,color:C.green,fontWeight:600,fontFamily:mono}}>
-        <span style={{width:8,height:8,background:C.green,borderRadius:"50%",animation:data.active>0?"activePulse 2s ease-in-out infinite":"pulse 2s ease-in-out infinite"}}/>
-        <span className="tabnum">{data.active}</span><span style={{color:C.muted}}>active</span>
+      <div style={{display:"flex",alignItems:"center",gap:S.sm,flexWrap:"wrap"}}>
+        {useMock&&<span title="Analytics data is mocked. Toggle in Settings → Site → Mock data mode." style={{display:"inline-flex",alignItems:"center",gap:S.xs,background:C.accentSoft,border:`1px solid ${C.accentBdr}`,borderRadius:10,padding:`${S.sm}px ${S.lg}px`,fontSize:T.small,color:C.accent,fontWeight:600,fontFamily:mono}}>
+          <span style={{width:8,height:8,background:C.accent,borderRadius:"50%"}}/>
+          Mock data
+        </span>}
+        <div style={{display:"flex",alignItems:"center",gap:S.sm,background:C.greenSoft,border:`1px solid ${C.greenBdr}`,borderRadius:10,padding:`${S.sm}px ${S.lg}px`,fontSize:T.small,color:C.green,fontWeight:600,fontFamily:mono}}>
+          <span style={{width:8,height:8,background:C.green,borderRadius:"50%",animation:data.active>0?"activePulse 2s ease-in-out infinite":"pulse 2s ease-in-out infinite"}}/>
+          <span className="tabnum">{data.active}</span><span style={{color:C.muted}}>active</span>
+        </div>
       </div>
     </div>
 
