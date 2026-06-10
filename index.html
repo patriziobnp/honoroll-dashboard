@@ -135,32 +135,6 @@ const PageBackdrop=()=>null;
 let CURRENT_USER_ID="anon";
 function setCurrentUserId(id){CURRENT_USER_ID=id?String(id):"anon";}
 
-// ─── Stealth mode (brand-name masking for demos) ─────────────────────────────
-// When enabled, every UI text node that flows through M() has "Honoroll" and
-// "Oasis" replaced with the user-chosen placeholders, case-preserving. Pure
-// render-time mask — no DB writes, no content mutation. Toggling off reveals
-// the real names instantly. Set per-user; synced into this module from
-// useUserSettings via an effect in AuthenticatedApp.
-let STEALTH={on:false,fromA:"Honoroll",toA:"Brand",fromB:"Oasis",toB:"Parent"};
-function setStealth(s){STEALTH={...STEALTH,...s};}
-function escapeRegex(s){return String(s).replace(/[.*+?^${}()|[\]\\]/g,"\\$&");}
-function caseMatch(matched,replacement){
-  if(!replacement)return matched;
-  if(matched.length>1&&matched===matched.toUpperCase())return replacement.toUpperCase();
-  // TitleCase match: capitalize first letter only — keep the rest of the
-  // user-supplied replacement as-is so "Acme Corp" stays "Acme Corp", not
-  // "Acme corp".
-  if(matched[0]===matched[0].toUpperCase())return replacement.charAt(0).toUpperCase()+replacement.slice(1);
-  return replacement.toLowerCase();
-}
-function M(text){
-  if(!STEALTH.on||typeof text!=="string"||!text)return text;
-  let out=text;
-  if(STEALTH.fromA){const re=new RegExp(escapeRegex(STEALTH.fromA),"gi");out=out.replace(re,(m)=>caseMatch(m,STEALTH.toA));}
-  if(STEALTH.fromB){const re=new RegExp(escapeRegex(STEALTH.fromB),"gi");out=out.replace(re,(m)=>caseMatch(m,STEALTH.toB));}
-  return out;
-}
-
 // Localstorage cache for Umami responses, keyed by (user, path). Fresh hits
 // return immediately; stale entries are the fallback when an API call fails
 // (rate limit / network / quota). markStale callback lets the caller surface
@@ -731,10 +705,10 @@ Be specific. Reference real numbers from the data when possible. Do not be gener
 
   return (<div style={{background:SEVERITY_BG[sev],border:`1px solid ${C.border}`,borderLeft:`3px solid ${SEVERITY_COLORS[sev]}`,borderRadius:"4px 12px 12px 4px",padding:"18px 22px",animation:`fadeIn 0.4s ease-out ${index*0.08}s both`}}>
     <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
-      <span style={{fontSize:15,fontWeight:600,color:C.bright,flex:1}}>{M(trend.title)}</span>
+      <span style={{fontSize:15,fontWeight:600,color:C.bright,flex:1}}>{trend.title}</span>
       <span style={{fontSize:10,fontFamily:mono,fontWeight:600,color:SEVERITY_COLORS[sev],textTransform:"uppercase",letterSpacing:"0.08em",padding:"3px 8px",background:"rgba(0,0,0,0.2)",borderRadius:4}}>{sev}</span>
     </div>
-    <div style={{fontSize:13,color:C.text,lineHeight:1.6,marginBottom:10}}>{M(trend.description)}</div>
+    <div style={{fontSize:13,color:C.text,lineHeight:1.6,marginBottom:10}}>{trend.description}</div>
     {trend.dataPoints?.length>0&&(<div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:12}}>{trend.dataPoints.map((dp,i)=>(<span key={i} style={{fontSize:11,fontFamily:mono,color:C.muted,padding:"3px 10px",background:"rgba(200,205,211,0.06)",borderRadius:4}}>{dp}</span>))}</div>)}
     <button onClick={fetchContext} style={{fontSize:11,fontFamily:mono,color:expanded?C.dim:SEVERITY_COLORS[sev],background:"none",border:`1px solid ${expanded?C.border:`${SEVERITY_COLORS[sev]}40`}`,borderRadius:6,padding:"5px 12px",cursor:"pointer",transition:"all 0.15s"}}>
       {loading?"Loading...":expanded?"Hide context ↑":context?"Show context ↓":"Provide more context →"}
@@ -771,7 +745,7 @@ Be specific. Reference real numbers from the data when possible. Do not be gener
     </div>)}
   </div>);
 };
-const SuggestionCard=({sug,index})=>{const ch=CHANNEL_COLORS[sug.channel]||C.muted;return (<div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"18px 22px",animation:`fadeIn 0.4s ease-out ${index*0.08}s both`}}><div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10,flexWrap:"wrap"}}><span style={{fontSize:10,fontWeight:600,fontFamily:mono,color:ch,textTransform:"uppercase",letterSpacing:"0.06em",padding:"3px 10px",background:`${ch}15`,border:`1px solid ${ch}30`,borderRadius:4}}>{sug.channel}</span><span style={{fontSize:10,fontWeight:600,fontFamily:mono,color:IMPACT_COLORS[sug.impact]||C.dim,textTransform:"uppercase",letterSpacing:"0.06em",padding:"3px 8px",background:`${(IMPACT_COLORS[sug.impact]||C.dim)}15`,borderRadius:4}}>{sug.impact} impact</span></div><div style={{fontSize:15,fontWeight:600,color:C.bright,marginBottom:6}}>{M(sug.title)}</div>{sug.linkedTrend&&<div style={{fontSize:11,color:C.dim,fontFamily:mono,marginBottom:10}}>Re: {M(sug.linkedTrend)}</div>}<div style={{fontSize:13,color:C.text,lineHeight:1.65}}>{M(sug.action)}</div></div>);};
+const SuggestionCard=({sug,index})=>{const ch=CHANNEL_COLORS[sug.channel]||C.muted;return (<div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"18px 22px",animation:`fadeIn 0.4s ease-out ${index*0.08}s both`}}><div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10,flexWrap:"wrap"}}><span style={{fontSize:10,fontWeight:600,fontFamily:mono,color:ch,textTransform:"uppercase",letterSpacing:"0.06em",padding:"3px 10px",background:`${ch}15`,border:`1px solid ${ch}30`,borderRadius:4}}>{sug.channel}</span><span style={{fontSize:10,fontWeight:600,fontFamily:mono,color:IMPACT_COLORS[sug.impact]||C.dim,textTransform:"uppercase",letterSpacing:"0.06em",padding:"3px 8px",background:`${(IMPACT_COLORS[sug.impact]||C.dim)}15`,borderRadius:4}}>{sug.impact} impact</span></div><div style={{fontSize:15,fontWeight:600,color:C.bright,marginBottom:6}}>{sug.title}</div>{sug.linkedTrend&&<div style={{fontSize:11,color:C.dim,fontFamily:mono,marginBottom:10}}>Re: {sug.linkedTrend}</div>}<div style={{fontSize:13,color:C.text,lineHeight:1.65}}>{sug.action}</div></div>);};
 
 const AIInsights=({analyticsData,contextFiles})=>{
   const[state,setState]=useState("idle");const[results,setResults]=useState(null);const[error,setError]=useState("");
@@ -868,8 +842,8 @@ const Dashboard=({cfg,site,useMock,onSettings,rangeId,onRangeChange,compareMode,
     <div style={{position:"relative",zIndex:1,display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:S.xxxl,paddingBottom:S.xl,borderBottom:`1px solid ${C.border}`,flexWrap:"wrap",gap:S.lg}}>
       <div>
         <div style={{marginBottom:S.xs}}><Eyebrow color={C.accent}>Analytics</Eyebrow></div>
-        <h1 style={{fontFamily:font,fontSize:T.display,fontWeight:700,color:C.bright,letterSpacing:"-0.02em",margin:0,lineHeight:1.05}}>{M(site.name)}</h1>
-        <div style={{fontSize:T.small,color:C.muted,marginTop:S.sm,fontFamily:mono}}>{M(site.domain)}</div>
+        <h1 style={{fontFamily:font,fontSize:T.display,fontWeight:700,color:C.bright,letterSpacing:"-0.02em",margin:0,lineHeight:1.05}}>{site.name}</h1>
+        <div style={{fontSize:T.small,color:C.muted,marginTop:S.sm,fontFamily:mono}}>{site.domain}</div>
       </div>
       <div style={{display:"flex",alignItems:"center",gap:S.sm,background:C.greenSoft,border:`1px solid ${C.greenBdr}`,borderRadius:10,padding:`${S.sm}px ${S.lg}px`,fontSize:T.small,color:C.green,fontWeight:600,fontFamily:mono}}>
         <span style={{width:8,height:8,background:C.green,borderRadius:"50%",animation:data.active>0?"activePulse 2s ease-in-out infinite":"pulse 2s ease-in-out infinite"}}/>
@@ -991,7 +965,7 @@ const Dashboard=({cfg,site,useMock,onSettings,rangeId,onRangeChange,compareMode,
     </SectionCard>
 
     {/* Footer */}
-    <div style={{textAlign:"center",padding:`${S.xxl}px 0 ${S.lg}px`,borderTop:`1px solid ${C.border}`,fontSize:T.caption,color:C.faint,fontFamily:mono}}>{M("Honoroll Dashboard v1.0")}</div>
+    <div style={{textAlign:"center",padding:`${S.xxl}px 0 ${S.lg}px`,borderTop:`1px solid ${C.border}`,fontSize:T.caption,color:C.faint,fontFamily:mono}}>Honoroll Dashboard v1.0</div>
   </div>);
 };
 
@@ -1790,12 +1764,10 @@ const XEngagement=({isMobile})=>(<div style={{display:"flex",justifyContent:"spa
 </div>);
 
 // Renders the body of one tweet with feed-style "Show more" truncation.
-// Body text flows through M() so stealth-mode masking covers drafted content.
 const XTweetText=({text,device})=>{
   const[expanded,setExpanded]=useState(false);
-  const masked=M(text||"");
-  const tooLong=masked.length>X_FEED_LIMIT;
-  const shown=tooLong&&!expanded?masked.slice(0,X_FEED_LIMIT).trimEnd():masked;
+  const tooLong=text.length>X_FEED_LIMIT;
+  const shown=tooLong&&!expanded?text.slice(0,X_FEED_LIMIT).trimEnd():text;
   return (<div style={{fontSize:15,color:X_TEXT,lineHeight:1.4,whiteSpace:"pre-wrap",marginTop:2,wordBreak:"break-word"}}>
     {shown}{tooLong&&!expanded&&"… "}
     {tooLong&&<span onClick={(e)=>{e.stopPropagation();setExpanded(v=>!v);}} style={{color:X_BLUE,cursor:"pointer"}}>{expanded?" Show less":"Show more"}</span>}
@@ -1812,9 +1784,9 @@ const XPostCard=({entry,device})=>{
   const tweets=entry.type==="thread"?parseThread(entry.fullText||entry.preview) : [entry.fullText||entry.preview||""];
   if(tweets.length===0)tweets.push("");
   const Header=()=>(<div style={{display:"flex",alignItems:"center",gap:4,flexWrap:"wrap"}}>
-    <span style={{fontSize:15,fontWeight:700,color:X_TEXT}}>{M("Honoroll")}</span>
+    <span style={{fontSize:15,fontWeight:700,color:X_TEXT}}>Honoroll</span>
     <XVerified/>
-    <span style={{fontSize:15,color:X_DIM}}>{M("@honoroll")} · 2h</span>
+    <span style={{fontSize:15,color:X_DIM}}>@honoroll · 2h</span>
     <span style={{marginLeft:"auto",color:X_DIM,fontSize:18,lineHeight:1}}>···</span>
   </div>);
   return (<div style={{width:"100%",maxWidth:W,transition:"max-width 0.25s ease",margin:"0 auto"}}>
@@ -1831,7 +1803,7 @@ const XPostCard=({entry,device})=>{
           return (<div key={idx} style={{display:"flex",gap:12}}>
             {/* avatar column + thread connector */}
             <div style={{display:"flex",flexDirection:"column",alignItems:"center",flexShrink:0}}>
-              <div style={{width:av,height:av,borderRadius:"50%",background:`linear-gradient(135deg,${C.accent},${C.accentBright})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:av*0.45,fontWeight:800,color:"#000"}}>{M("Honoroll").charAt(0).toUpperCase()}</div>
+              <div style={{width:av,height:av,borderRadius:"50%",background:`linear-gradient(135deg,${C.accent},${C.accentBright})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:av*0.45,fontWeight:800,color:"#000"}}>H</div>
               {!isLast&&<div style={{flex:1,width:2,background:X_BORDER,marginTop:4}}/>}
             </div>
             <div style={{flex:1,minWidth:0,paddingBottom:isLast?0:16}}>
@@ -1995,7 +1967,7 @@ const ContentQueue=({items,onUpdate,onDelete})=>{
   const published=items.filter(i=>i.status==="published").sort((a,b)=>(b.date||"").localeCompare(a.date||""));
   const QueueItem=({item})=> (<div style={{display:"flex",alignItems:"center",gap:S.md,padding:`${S.sm+2}px ${S.md+2}px`,background:C.surfaceInset,borderRadius:8,border:`1px solid ${C.border}`,flexWrap:"wrap"}}>
     <div style={{width:6,height:6,borderRadius:"50%",background:TYPE_COLORS[item.type],flexShrink:0}}/>
-    <div style={{flex:1,minWidth:120}}><div style={{fontSize:T.caption,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{M(item.preview)}</div></div>
+    <div style={{flex:1,minWidth:120}}><div style={{fontSize:T.caption,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.preview}</div></div>
     <StatusBadge status={item.status}/>
     <ScheduleBtn onSchedule={(date)=>{if(date)onUpdate({...item,date,status:"scheduled"});}} scheduledDate={item.date} labelOverride={(item.status==="scheduled"?"Reschedule · ":"Schedule · ")+(item.date||"")}/>
     <CopyBtn text={item.fullText||item.preview} label="Copy" onCopied={()=>onUpdate({...item,status:"published"})}/>
@@ -2126,7 +2098,7 @@ const ArticleCard=({article,onUpdateBody,onUpdateHeadline,onSchedule,scheduledDa
     </div>
     <EditableText value={article.headline} onChange={onUpdateHeadline} style={{fontSize:20,fontWeight:700,letterSpacing:"-0.02em",marginBottom:20}}/>
     {editBody?<div><textarea ref={bodyRef} value={bodyDraft} onChange={e=>{setBodyDraft(e.target.value);e.target.style.height="auto";e.target.style.height=e.target.scrollHeight+"px";}} style={{width:"100%",background:"rgba(200,205,211,0.06)",border:`1px solid rgba(217,170,90,0.3)`,borderRadius:8,padding:"14px",fontSize:14,fontFamily:font,color:C.bright,outline:"none",resize:"none",lineHeight:1.75,boxSizing:"border-box",minHeight:300}}/><div style={{display:"flex",gap:8,marginTop:8,justifyContent:"flex-end",alignItems:"center"}}><EmojiBtn onPick={insertEmojiBody}/><button onClick={()=>{setEditBody(false);setBodyDraft(article.body||"");}} style={{fontSize:11,fontFamily:mono,color:C.muted,background:"none",border:`1px solid ${C.border}`,borderRadius:6,padding:"4px 12px",cursor:"pointer"}}>Cancel</button><button onClick={saveBody} style={{fontSize:11,fontFamily:mono,color:C.bg,background:C.accent,border:"none",borderRadius:6,padding:"4px 12px",cursor:"pointer",fontWeight:600}}>Save</button></div></div>
-    :<div style={{fontSize:14,color:C.text,lineHeight:1.75}}>{M(article.body||"").split("\n").map((line,i)=>{if(line.startsWith("## ")) return <h3 key={i} style={{fontSize:16,fontWeight:700,color:C.bright,marginTop:24,marginBottom:8,fontFamily:font}}>{line.replace("## ","")}</h3>;if(line.startsWith("### ")) return <h4 key={i} style={{fontSize:14,fontWeight:600,color:C.bright,marginTop:20,marginBottom:6,fontFamily:font}}>{line.replace("### ","")}</h4>;if(line.trim()==="") return <div key={i} style={{height:12}}/>;const parts=line.split(/(\*\*.*?\*\*)/g);return <p key={i} style={{marginBottom:8}}>{parts.map((part,j)=>part.startsWith("**")&&part.endsWith("**")?<strong key={j} style={{color:C.bright,fontWeight:600}}>{part.slice(2,-2)}</strong>:part)}</p>;})}</div>}
+    :<div style={{fontSize:14,color:C.text,lineHeight:1.75}}>{article.body?.split("\n").map((line,i)=>{if(line.startsWith("## ")) return <h3 key={i} style={{fontSize:16,fontWeight:700,color:C.bright,marginTop:24,marginBottom:8,fontFamily:font}}>{line.replace("## ","")}</h3>;if(line.startsWith("### ")) return <h4 key={i} style={{fontSize:14,fontWeight:600,color:C.bright,marginTop:20,marginBottom:6,fontFamily:font}}>{line.replace("### ","")}</h4>;if(line.trim()==="") return <div key={i} style={{height:12}}/>;const parts=line.split(/(\*\*.*?\*\*)/g);return <p key={i} style={{marginBottom:8}}>{parts.map((part,j)=>part.startsWith("**")&&part.endsWith("**")?<strong key={j} style={{color:C.bright,fontWeight:600}}>{part.slice(2,-2)}</strong>:part)}</p>;})}</div>}
   </div>);
 };
 
@@ -2288,7 +2260,7 @@ const ContentPage=({analyticsData,contentState,setContentState,contextFiles,defa
     </SectionCard>
 
     {/* Footer */}
-    <div style={{textAlign:"center",padding:`${S.xxl}px 0 ${S.lg}px`,borderTop:`1px solid ${C.border}`,fontSize:T.caption,color:C.faint,fontFamily:mono}}>{M("Honoroll Dashboard v1.0")}</div>
+    <div style={{textAlign:"center",padding:`${S.xxl}px 0 ${S.lg}px`,borderTop:`1px solid ${C.border}`,fontSize:T.caption,color:C.faint,fontFamily:mono}}>Honoroll Dashboard v1.0</div>
   </div>);
 };
 
@@ -2351,7 +2323,7 @@ const UtmHistoryItem=({item,onDelete})=>{
   return (<div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,padding:"14px 18px",marginBottom:8}}>
     <div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
       <div style={{flex:1,minWidth:200}}>
-        <div style={{fontSize:13,fontWeight:600,color:C.bright,marginBottom:4}}>{M(item.label)}</div>
+        <div style={{fontSize:13,fontWeight:600,color:C.bright,marginBottom:4}}>{item.label}</div>
         <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
           <span style={{fontSize:9,fontFamily:mono,color:C.accent,padding:"2px 7px",background:C.accentSoft,borderRadius:3}}>{item.source}</span>
           <span style={{fontSize:9,fontFamily:mono,color:C.blue,padding:"2px 7px",background:"rgba(90,184,217,0.08)",borderRadius:3}}>{item.medium}</span>
@@ -2364,7 +2336,7 @@ const UtmHistoryItem=({item,onDelete})=>{
       <button onClick={()=>{if(!safeOpenUrl(item.url)){alert("This URL is not safe to open. Only http(s) URLs are allowed.");return;}window.open(item.url,"_blank","noopener,noreferrer");}} style={{fontSize:11,fontFamily:mono,color:C.blue,background:"none",border:`1px solid rgba(90,184,217,0.3)`,borderRadius:6,padding:"4px 10px",cursor:"pointer"}}>↗ Open</button>
       <button onClick={()=>onDelete(item.id)} style={{fontSize:11,fontFamily:mono,color:C.red,background:"none",border:`1px solid rgba(248,113,113,0.2)`,borderRadius:6,padding:"4px 10px",cursor:"pointer"}}>✕</button>
     </div>
-    {expanded&&<div style={{marginTop:10,paddingTop:10,borderTop:`1px solid ${C.border}`,fontSize:11,fontFamily:mono,color:C.text,wordBreak:"break-all",lineHeight:1.6,animation:"fadeIn 0.2s ease-out"}}>{M(item.url)}</div>}
+    {expanded&&<div style={{marginTop:10,paddingTop:10,borderTop:`1px solid ${C.border}`,fontSize:11,fontFamily:mono,color:C.text,wordBreak:"break-all",lineHeight:1.6,animation:"fadeIn 0.2s ease-out"}}>{item.url}</div>}
   </div>);
 };
 
@@ -2507,7 +2479,7 @@ const UtmPage=({utmLinks})=>{
     </SectionCard>
 
     {/* Footer */}
-    <div style={{textAlign:"center",padding:`${S.xxl}px 0 ${S.lg}px`,borderTop:`1px solid ${C.border}`,fontSize:T.caption,color:C.faint,fontFamily:mono,marginTop:S.xxl}}>{M("Honoroll Dashboard v1.0")}</div>
+    <div style={{textAlign:"center",padding:`${S.xxl}px 0 ${S.lg}px`,borderTop:`1px solid ${C.border}`,fontSize:T.caption,color:C.faint,fontFamily:mono,marginTop:S.xxl}}>Honoroll Dashboard v1.0</div>
   </div>);
 };
 
@@ -2521,7 +2493,7 @@ const Header=({active,onChange,onSettings,settingsActive,user,onSignOut})=>{
       {/* Logo */}
       <div style={{display:"flex",alignItems:"center",gap:S.md-2,flexShrink:0}}>
         <HonorollMark size={32} radius={10}/>
-        <div style={{fontSize:T.body+3,fontWeight:700,color:C.bright,letterSpacing:"-0.015em"}}>{M("Honoroll")}</div>
+        <div style={{fontSize:T.body+3,fontWeight:700,color:C.bright,letterSpacing:"-0.015em"}}>Honoroll</div>
       </div>
       {/* Tabs as Linear-style segmented control */}
       <div style={{display:"flex",gap:S.xs,flex:1,flexWrap:"wrap",background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,padding:S.xs}}>
@@ -2531,13 +2503,13 @@ const Header=({active,onChange,onSettings,settingsActive,user,onSignOut})=>{
       </div>
       {/* User menu */}
       <div style={{position:"relative",flexShrink:0}}>
-        <button onClick={()=>setMenuOpen(!menuOpen)} title={STEALTH.on?"":(user?.email||"")} style={{width:38,height:38,borderRadius:"50%",background:menuOpen?C.accentSoft:C.surfaceElevated,border:`1px solid ${menuOpen?C.accent:C.border}`,color:menuOpen?C.accent:C.muted,cursor:"pointer",fontSize:T.body,fontWeight:700,fontFamily:mono,display:"flex",alignItems:"center",justifyContent:"center",transition:"all 0.15s"}}>{STEALTH.on?"·":initial}</button>
+        <button onClick={()=>setMenuOpen(!menuOpen)} title={user?.email||""} style={{width:38,height:38,borderRadius:"50%",background:menuOpen?C.accentSoft:C.surfaceElevated,border:`1px solid ${menuOpen?C.accent:C.border}`,color:menuOpen?C.accent:C.muted,cursor:"pointer",fontSize:T.body,fontWeight:700,fontFamily:mono,display:"flex",alignItems:"center",justifyContent:"center",transition:"all 0.15s"}}>{initial}</button>
         {menuOpen&&(<>
           <div onClick={()=>setMenuOpen(false)} style={{position:"fixed",inset:0,zIndex:39}}/>
           <div style={{position:"absolute",top:"calc(100% + 8px)",right:0,zIndex:40,background:"#161A20",border:`1px solid ${C.borderStrong}`,borderRadius:12,padding:S.xs+2,minWidth:260,boxShadow:"0 12px 32px rgba(0,0,0,0.5)",animation:"fadeIn 0.15s ease-out"}}>
             <div style={{padding:`${S.md-2}px ${S.md+2}px`,borderBottom:`1px solid ${C.border}`,marginBottom:S.xs+2}}>
               <Eyebrow>Signed in as</Eyebrow>
-              <div style={{fontSize:T.small,color:C.bright,fontFamily:mono,wordBreak:"break-all",marginTop:S.xs}}>{STEALTH.on?"—":(user?.email||"")}</div>
+              <div style={{fontSize:T.small,color:C.bright,fontFamily:mono,wordBreak:"break-all",marginTop:S.xs}}>{user?.email||""}</div>
             </div>
             <button onClick={()=>{setMenuOpen(false);onSignOut();}} style={{display:"block",width:"100%",textAlign:"left",padding:`${S.md-2}px ${S.md+2}px`,fontSize:T.small,fontFamily:font,fontWeight:500,color:C.red,background:"transparent",border:"none",borderRadius:6,cursor:"pointer"}}>Sign out</button>
           </div>
@@ -2642,28 +2614,6 @@ const SettingsPage=({ctxFiles,brandAssets,defaults,onUpdateDefaults,saveState})=
                 <span style={{fontSize:T.caption-1,color:C.dim,marginLeft:"auto"}}>{defaults.useMockData?"Switch off when site goes live":"Switch on for offline demos"}</span>
               </button>
             </div>
-            {/* Stealth mode — masks brand names in the UI for demos */}
-            <div>
-              <label style={{display:"block",marginBottom:S.sm-2}}><Eyebrow>Stealth mode</Eyebrow></label>
-              <button onClick={()=>onUpdateDefaults({stealthMode:!defaults.stealthMode})} style={{display:"flex",alignItems:"center",gap:S.md,padding:`${S.md-2}px ${S.md+2}px`,width:"100%",background:defaults.stealthMode?C.accentSoft:C.surfaceInset,border:`1px solid ${defaults.stealthMode?C.accentBdr:C.border}`,borderRadius:8,cursor:"pointer",textAlign:"left"}}>
-                <span style={{width:36,height:20,borderRadius:10,background:defaults.stealthMode?C.accent:C.faint,position:"relative",flexShrink:0,transition:"background 0.15s"}}>
-                  <span style={{position:"absolute",top:2,left:defaults.stealthMode?18:2,width:16,height:16,borderRadius:"50%",background:C.bg,transition:"left 0.15s"}}/>
-                </span>
-                <span style={{fontSize:T.caption,color:defaults.stealthMode?C.accent:C.muted,fontFamily:mono,fontWeight:600}}>{defaults.stealthMode?"Stealth on":"Stealth off"}</span>
-                <span style={{fontSize:T.caption-1,color:C.dim,marginLeft:"auto"}}>Hide brand names in the UI for demos</span>
-              </button>
-              {defaults.stealthMode&&<div style={{marginTop:S.md,display:"grid",gridTemplateColumns:"1fr 1fr",gap:S.md}}>
-                <div>
-                  <label style={{display:"block",marginBottom:S.xs}}><Eyebrow>Replace "Honoroll" with</Eyebrow></label>
-                  <input value={defaults.stealthReplaceHonoroll||""} onChange={e=>onUpdateDefaults({stealthReplaceHonoroll:e.target.value})} placeholder="Brand" style={{width:"100%",background:C.surfaceInset,border:`1px solid ${C.border}`,borderRadius:8,padding:`${S.sm}px ${S.md-2}px`,fontSize:T.caption,fontFamily:font,color:C.bright,outline:"none",boxSizing:"border-box"}}/>
-                </div>
-                <div>
-                  <label style={{display:"block",marginBottom:S.xs}}><Eyebrow>Replace "Oasis" with</Eyebrow></label>
-                  <input value={defaults.stealthReplaceOasis||""} onChange={e=>onUpdateDefaults({stealthReplaceOasis:e.target.value})} placeholder="Parent" style={{width:"100%",background:C.surfaceInset,border:`1px solid ${C.border}`,borderRadius:8,padding:`${S.sm}px ${S.md-2}px`,fontSize:T.caption,fontFamily:font,color:C.bright,outline:"none",boxSizing:"border-box"}}/>
-                </div>
-              </div>}
-              <div style={{fontSize:T.eyebrow,color:C.dim,marginTop:S.sm-2,fontFamily:mono,lineHeight:1.5}}>Pure render-time mask. No data is altered. Editable inputs (drafts, topic, Site form) still show the real values — toggle off before editing during a demo.</div>
-            </div>
           </div>
         </SectionCard>)}
         {section==="defaults"&&(<SectionCard accent={SECTION_COLORS.defaults}>
@@ -2709,7 +2659,7 @@ const SettingsPage=({ctxFiles,brandAssets,defaults,onUpdateDefaults,saveState})=
       </div>
     </div>
     {/* Footer */}
-    <div style={{textAlign:"center",padding:"40px 0 16px",borderTop:`1px solid ${C.border}`,fontSize:12,color:"#374151",fontFamily:mono,marginTop:32}}>{M("Honoroll Dashboard v1.0")}</div>
+    <div style={{textAlign:"center",padding:"40px 0 16px",borderTop:`1px solid ${C.border}`,fontSize:12,color:"#374151",fontFamily:mono,marginTop:32}}>Honoroll Dashboard v1.0</div>
   </div>);
 };
 
@@ -2791,9 +2741,9 @@ const DEFAULT_AI_MODEL="llama-3.3-70b-versatile";
 const DEFAULT_SITE_NAME="Honoroll";
 const DEFAULT_SITE_DOMAIN="honoroll.io";
 const DEFAULT_UMAMI_WEBSITE_ID="b383e359-7384-45e0-81b4-0a33ba905df3";
-const DEFAULT_SETTINGS={tone:"founder",postLength:"normal",threadLength:"normal",articleLength:"normal",aiModel:DEFAULT_AI_MODEL,siteName:DEFAULT_SITE_NAME,siteDomain:DEFAULT_SITE_DOMAIN,umamiWebsiteId:DEFAULT_UMAMI_WEBSITE_ID,useMockData:false,contentTopic:"",stealthMode:false,stealthReplaceHonoroll:"Brand",stealthReplaceOasis:"Parent"};
-const rowToSettings=(r)=>({tone:r.tone||"founder",postLength:r.post_length||"normal",threadLength:r.thread_length||"normal",articleLength:r.article_length||"normal",aiModel:r.ai_model||DEFAULT_AI_MODEL,siteName:r.site_name||DEFAULT_SITE_NAME,siteDomain:r.site_domain||DEFAULT_SITE_DOMAIN,umamiWebsiteId:r.umami_website_id||DEFAULT_UMAMI_WEBSITE_ID,useMockData:!!r.use_mock_data,contentTopic:r.content_topic||"",stealthMode:!!r.stealth_mode,stealthReplaceHonoroll:r.stealth_replace_honoroll||"Brand",stealthReplaceOasis:r.stealth_replace_oasis||"Parent"});
-const settingsToRow=(s,userId)=>({user_id:userId,tone:s.tone,post_length:s.postLength,thread_length:s.threadLength,article_length:s.articleLength,ai_model:s.aiModel||DEFAULT_AI_MODEL,site_name:s.siteName||DEFAULT_SITE_NAME,site_domain:s.siteDomain||DEFAULT_SITE_DOMAIN,umami_website_id:s.umamiWebsiteId||DEFAULT_UMAMI_WEBSITE_ID,use_mock_data:!!s.useMockData,content_topic:s.contentTopic||"",stealth_mode:!!s.stealthMode,stealth_replace_honoroll:s.stealthReplaceHonoroll||"Brand",stealth_replace_oasis:s.stealthReplaceOasis||"Parent"});
+const DEFAULT_SETTINGS={tone:"founder",postLength:"normal",threadLength:"normal",articleLength:"normal",aiModel:DEFAULT_AI_MODEL,siteName:DEFAULT_SITE_NAME,siteDomain:DEFAULT_SITE_DOMAIN,umamiWebsiteId:DEFAULT_UMAMI_WEBSITE_ID,useMockData:false,contentTopic:""};
+const rowToSettings=(r)=>({tone:r.tone||"founder",postLength:r.post_length||"normal",threadLength:r.thread_length||"normal",articleLength:r.article_length||"normal",aiModel:r.ai_model||DEFAULT_AI_MODEL,siteName:r.site_name||DEFAULT_SITE_NAME,siteDomain:r.site_domain||DEFAULT_SITE_DOMAIN,umamiWebsiteId:r.umami_website_id||DEFAULT_UMAMI_WEBSITE_ID,useMockData:!!r.use_mock_data,contentTopic:r.content_topic||""});
+const settingsToRow=(s,userId)=>({user_id:userId,tone:s.tone,post_length:s.postLength,thread_length:s.threadLength,article_length:s.articleLength,ai_model:s.aiModel||DEFAULT_AI_MODEL,site_name:s.siteName||DEFAULT_SITE_NAME,site_domain:s.siteDomain||DEFAULT_SITE_DOMAIN,umami_website_id:s.umamiWebsiteId||DEFAULT_UMAMI_WEBSITE_ID,use_mock_data:!!s.useMockData,content_topic:s.contentTopic||""});
 
 const useUserSettings=(user)=>{
   const[settings,setSettings]=useState(DEFAULT_SETTINGS);
@@ -3303,16 +3253,6 @@ function AuthenticatedApp({user,signOut}){
   const userSettings=useUserSettings(user);
   // Keep the module-level AI model in sync with the user's chosen setting
   useEffect(()=>{setActiveAIModel(userSettings.settings.aiModel);},[userSettings.settings.aiModel]);
-  // Synchronously mirror stealth settings into the module-level STEALTH at the
-  // top of every render — so when settings change, the same render already
-  // sees the new masking config (no one-render lag). document.title is a side
-  // effect, kept in the effect below.
-  setStealth({on:!!userSettings.settings.stealthMode,fromA:"Honoroll",toA:userSettings.settings.stealthReplaceHonoroll||"Brand",fromB:"Oasis",toB:userSettings.settings.stealthReplaceOasis||"Parent"});
-  useEffect(()=>{
-    if(typeof document==="undefined")return;
-    const s=userSettings.settings;
-    document.title=s.stealthMode?`${s.stealthReplaceHonoroll||"Brand"} Dashboard`:"Honoroll Dashboard";
-  },[userSettings.settings.stealthMode,userSettings.settings.stealthReplaceHonoroll]);
   // Mirror user id to the module-level CURRENT_USER_ID so the Umami client
   // cache and other utilities scope their localStorage keys per-user.
   useEffect(()=>{setCurrentUserId(user?.id);return()=>setCurrentUserId(null);},[user?.id]);
