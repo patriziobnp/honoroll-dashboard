@@ -2495,9 +2495,8 @@ const Header=({active,onChange,onSettings,settingsActive,user,onSignOut})=>{
   return (<div style={{background:"rgba(10,13,17,0.72)",backdropFilter:"blur(14px) saturate(140%)",WebkitBackdropFilter:"blur(14px) saturate(140%)",borderBottom:`1px solid ${C.border}`,position:"sticky",top:0,zIndex:40}}>
     <div style={{maxWidth:1280,margin:"0 auto",padding:`${S.md+2}px ${S.xxl-4}px`,display:"flex",alignItems:"center",gap:S.xxl,flexWrap:"wrap"}}>
       {/* Logo */}
-      <div style={{display:"flex",alignItems:"center",gap:S.md-2,flexShrink:0}}>
+      <div style={{display:"flex",alignItems:"center",flexShrink:0}}>
         <HonorollMark size={32} radius={10}/>
-        <div style={{fontSize:T.body+3,fontWeight:700,color:C.bright,letterSpacing:"-0.015em"}}>Honoroll</div>
       </div>
       {/* Tabs as Linear-style segmented control */}
       <div style={{display:"flex",gap:S.xs,flex:1,flexWrap:"wrap",background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,padding:S.xs}}>
