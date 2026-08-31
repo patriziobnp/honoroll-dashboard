@@ -21,14 +21,16 @@ const isoInt = (v, max) => Number.isInteger(+v) && +v >= 0 && +v <= max;
 const isoUnit = (v) => v === "hour" || v === "day";
 
 const sq = (s) => String(s).replace(/'/g, "''");
-const hostClause = (host) => host ? ` AND properties.$host = '${sq(host)}'` : "";
+// HogQL accesses $-prefixed properties via bracket notation to avoid parser
+// issues; use properties['$host'] rather than properties.$host.
+const hostClause = (host) => host ? ` AND properties['$host'] = '${sq(host)}'` : "";
 
 const QUERIES = {
   stats: ({ start, end, host }) => `
     SELECT
       count() AS pageviews,
-      count(DISTINCT distinct_id) AS visitors,
-      count(DISTINCT properties.$session_id) AS visits,
+      uniq(distinct_id) AS visitors,
+      uniq(properties['$session_id']) AS visits,
       0 AS bounces,
       0 AS totaltime
     FROM events
@@ -38,17 +40,17 @@ const QUERIES = {
       ${hostClause(host)}
   `,
   active: ({ host }) => `
-    SELECT count(DISTINCT distinct_id) AS visitors
+    SELECT uniq(distinct_id) AS visitors
     FROM events
     WHERE event = '$pageview'
-      AND timestamp >= now() - INTERVAL 5 MINUTE
+      AND timestamp >= now() - interval 5 minute
       ${hostClause(host)}
   `,
   timeseries: ({ start, end, unit, host }) => `
     SELECT
       ${unit === "hour" ? "toStartOfHour" : "toStartOfDay"}(timestamp) AS bucket,
       count() AS pageviews,
-      count(DISTINCT properties.$session_id) AS sessions
+      uniq(properties['$session_id']) AS sessions
     FROM events
     WHERE event = '$pageview'
       AND timestamp >= toDateTime('${sq(start)}')
@@ -82,7 +84,7 @@ const QUERIES = {
     LIMIT ${limit}
   `,
   channels: ({ start, end, host, limit }) => `
-    SELECT coalesce(properties.utm_source, 'Direct') AS name, count() AS value
+    SELECT coalesce(properties['utm_source'], 'Direct') AS name, count() AS value
     FROM events
     WHERE event = '$pageview'
       AND timestamp >= toDateTime('${sq(start)}')
@@ -108,12 +110,12 @@ const QUERIES = {
 };
 
 const BREAKDOWN_PROPS = {
-  path: "properties.$pathname",
-  referrer: "properties.$referring_domain",
-  country: "properties.$geoip_country_code",
-  browser: "properties.$browser",
-  device: "properties.$device_type",
-  os: "properties.$os",
+  path: "properties['$pathname']",
+  referrer: "properties['$referring_domain']",
+  country: "properties['$geoip_country_code']",
+  browser: "properties['$browser']",
+  device: "properties['$device_type']",
+  os: "properties['$os']",
 };
 
 // Convert PostHog {columns, results} → array of column-keyed objects.
@@ -205,7 +207,9 @@ export default async function handler(req, res) {
   else return res.status(400).json({ error: "Unknown query type" });
 
   try {
-    const url = `https://${HOST}/api/projects/${PROJECT_ID}/query/`;
+    // PostHog current Query API endpoint uses /environments/{id}/; the older
+    // /projects/{id}/ path also works but environments is the current standard.
+    const url = `https://${HOST}/api/environments/${PROJECT_ID}/query/`;
     const r = await fetch(url, {
       method: "POST",
       headers: {

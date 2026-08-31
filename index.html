@@ -275,7 +275,8 @@ async function posthogFetch(type,params,opts){
     if(res.ok){const data=await res.json();writeAnalyticsCache(type,params,data);return data;}
     // Live call failed. Fall back to stale cache if we have it.
     if(cached){if(markStale)markStale(res.status===429?"quota":`http-${res.status}`);return cached.data;}
-    throw new Error(`PostHog ${type}: ${res.status}`);
+    let bodySnippet="";try{const j=await res.json();bodySnippet=j&&j.error?` — ${String(j.error).slice(0,240)}`:"";}catch(e){try{bodySnippet=` — ${(await res.text()).slice(0,240)}`;}catch(e2){}}
+    throw new Error(`PostHog ${type}: ${res.status}${bodySnippet}`);
   }catch(networkErr){
     if(cached){if(markStale)markStale("network");return cached.data;}
     throw networkErr;
