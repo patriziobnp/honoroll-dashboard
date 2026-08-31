@@ -135,26 +135,26 @@ const PageBackdrop=()=>null;
 let CURRENT_USER_ID="anon";
 function setCurrentUserId(id){CURRENT_USER_ID=id?String(id):"anon";}
 
-// Localstorage cache for Umami responses, keyed by (user, path). Fresh hits
-// return immediately; stale entries are the fallback when an API call fails
-// (rate limit / network / quota). markStale callback lets the caller surface
-// "showing stale data" to the UI.
-const UMAMI_FRESH_MS=5*60*1000;
-function umamiCacheKey(path,region){return `honoroll_umami_${CURRENT_USER_ID}_${region||"def"}_${path}`;}
-function readUmamiCache(path,region){
-  try{const raw=typeof localStorage!=="undefined"?localStorage.getItem(umamiCacheKey(path,region)):null;
+// Localstorage cache for analytics responses, keyed by (user, query-type, params).
+// Fresh hits return immediately; stale entries are the fallback when an API call
+// fails (rate limit / network / quota). markStale callback lets the caller
+// surface "showing stale data" to the UI.
+const ANALYTICS_FRESH_MS=5*60*1000;
+function analyticsCacheKey(type,params){return `honoroll_analytics_${CURRENT_USER_ID}_${type}_${JSON.stringify(params||{})}`;}
+function readAnalyticsCache(type,params){
+  try{const raw=typeof localStorage!=="undefined"?localStorage.getItem(analyticsCacheKey(type,params)):null;
     if(!raw)return null;const parsed=JSON.parse(raw);
     if(!parsed||typeof parsed.ts!=="number"||!("data" in parsed))return null;
     return parsed;
   }catch(e){return null;}
 }
-function writeUmamiCache(path,region,data){
-  try{if(typeof localStorage!=="undefined")localStorage.setItem(umamiCacheKey(path,region),JSON.stringify({ts:Date.now(),data}));}catch(e){}
+function writeAnalyticsCache(type,params,data){
+  try{if(typeof localStorage!=="undefined")localStorage.setItem(analyticsCacheKey(type,params),JSON.stringify({ts:Date.now(),data}));}catch(e){}
 }
 
 // ─── Security helpers ────────────────────────────────────────────────────────
 // Fetch wrapper that attaches the current Supabase access token to every
-// request to our authenticated proxies (/api/groq, /api/umami, /api/seo).
+// request to our authenticated proxies (/api/groq, /api/posthog, /api/pagespeed).
 // Surfaces a clear error if the user isn't signed in.
 async function authedFetch(url,options={}){
   const sb=getSupabase();
@@ -257,31 +257,31 @@ function getCompareLabel(rangeId,compareMode) {
   return map[compareMode]||"previous period";
 }
 
-// ─── Umami API Layer ─────────────────────────────────────────────────────────
-// umamiFetch with client cache + stale fallback.
+// ─── Analytics API Layer (PostHog) ───────────────────────────────────────────
+// posthogFetch with client cache + stale fallback.
 // - Returns cached data if cached <5 min old (no API call).
-// - Otherwise hits the proxy. On success, caches and returns.
+// - Otherwise hits the /api/posthog proxy. On success, caches and returns.
 // - On any failure (4xx/5xx/network), returns any cached value regardless of
 //   age and calls markStale() so the UI can flag the section as stale.
 // - Throws only when both the live call and the cache are unavailable.
-async function umamiFetch(path,apiKey,region,opts){
+async function posthogFetch(type,params,opts){
   const markStale=opts&&typeof opts.markStale==="function"?opts.markStale:null;
-  const cached=readUmamiCache(path,region);
+  const cached=readAnalyticsCache(type,params);
   const now=Date.now();
-  if(cached&&(now-cached.ts)<UMAMI_FRESH_MS){return cached.data;}
-  const url=`/api/umami?path=${encodeURIComponent(path)}${region?`&region=${encodeURIComponent(region)}`:""}`;
+  if(cached&&(now-cached.ts)<ANALYTICS_FRESH_MS){return cached.data;}
+  const url=`/api/posthog?${qs({type,...params})}`;
   try{
     const res=await authedFetch(url,{headers:{"Accept":"application/json"}});
-    if(res.ok){const data=await res.json();writeUmamiCache(path,region,data);return data;}
-    // Live call failed (likely 429 quota). Fall back to stale cache if we have it.
+    if(res.ok){const data=await res.json();writeAnalyticsCache(type,params,data);return data;}
+    // Live call failed. Fall back to stale cache if we have it.
     if(cached){if(markStale)markStale(res.status===429?"quota":`http-${res.status}`);return cached.data;}
-    throw new Error(`Umami ${path}: ${res.status}`);
+    throw new Error(`PostHog ${type}: ${res.status}`);
   }catch(networkErr){
     if(cached){if(markStale)markStale("network");return cached.data;}
     throw networkErr;
   }
 }
-function qs(params){return Object.entries(params).filter(([,v])=>v!=null).map(([k,v])=>`${k}=${encodeURIComponent(v)}`).join("&");}
+function qs(params){return Object.entries(params).filter(([,v])=>v!=null&&v!=="").map(([k,v])=>`${k}=${encodeURIComponent(v)}`).join("&");}
 
 // ─── Data Fetching Hook ──────────────────────────────────────────────────────
 function useAnalyticsData(cfg,site,rangeId,compareMode) {
@@ -291,43 +291,44 @@ function useAnalyticsData(cfg,site,rangeId,compareMode) {
   const fetchAll=useCallback(async()=>{
     if(!cfg||!site)return;
     setLoading(true);setError(null);
-    const{key,region,seoKey}=cfg;
-    const tz=Intl.DateTimeFormat().resolvedOptions().timeZone;
-    const id=site.id;
     const primary=getRange(rangeId);
     const comparison=getComparisonRange(rangeId,compareMode);
     const unit=getTimeUnit(rangeId);
-    // Track whether any Umami call in this batch served stale data. The UI
+    // PostHog HogQL takes ISO datetime strings; our ranges are epoch ms.
+    const iso=(ms)=>new Date(ms).toISOString();
+    const primStart=iso(primary.startAt),primEnd=iso(primary.endAt);
+    const host=site.domain||"";
+    // Track whether any analytics call in this batch served stale data. The UI
     // uses this to show a small "stale data" pill instead of a hard error.
-    let umamiStaleSource=null;
-    const U=(p,k,r)=>umamiFetch(p,k,r,{markStale:(reason)=>{if(!umamiStaleSource)umamiStaleSource=reason;}});
+    let analyticsStaleSource=null;
+    const P=(type,params)=>posthogFetch(type,params,{markStale:(reason)=>{if(!analyticsStaleSource)analyticsStaleSource=reason;}});
     try{
       const batch1=await Promise.all([
-        U(`/websites/${id}/stats?${qs(primary)}`,key,region),
-        comparison?U(`/websites/${id}/stats?${qs(comparison)}`,key,region):Promise.resolve({pageviews:0,visitors:0,visits:0,bounces:0,totaltime:0}),
-        U(`/websites/${id}/active`,key,region),
-        U(`/websites/${id}/pageviews?${qs({...primary,unit,timezone:tz})}`,key,region),
+        P("stats",{start:primStart,end:primEnd,host}),
+        comparison?P("stats",{start:iso(comparison.startAt),end:iso(comparison.endAt),host}):Promise.resolve({pageviews:0,visitors:0,visits:0,bounces:0,totaltime:0}),
+        P("active",{host}),
+        P("timeseries",{start:primStart,end:primEnd,unit,host}),
       ]);
       await sleep(400);
       const[statsToday,statsYesterday,active,timeSeries]=batch1;
       const batch2=await Promise.all([
-        U(`/websites/${id}/metrics?${qs({...primary,type:"path",limit:10})}`,key,region),
-        U(`/websites/${id}/metrics?${qs({...primary,type:"referrer",limit:10})}`,key,region),
-        U(`/websites/${id}/metrics?${qs({...primary,type:"country",limit:10})}`,key,region),
+        P("breakdown",{start:primStart,end:primEnd,prop:"path",limit:10,host}),
+        P("breakdown",{start:primStart,end:primEnd,prop:"referrer",limit:10,host}),
+        P("breakdown",{start:primStart,end:primEnd,prop:"country",limit:10,host}),
       ]);
       await sleep(400);
       const[pages,referrers,countries]=batch2;
       const batch3=await Promise.all([
-        U(`/websites/${id}/metrics?${qs({...primary,type:"browser",limit:10})}`,key,region),
-        U(`/websites/${id}/metrics?${qs({...primary,type:"device",limit:10})}`,key,region),
-        U(`/websites/${id}/metrics?${qs({...primary,type:"os",limit:10})}`,key,region),
-        U(`/websites/${id}/metrics?${qs({...primary,type:"event",limit:10})}`,key,region),
+        P("breakdown",{start:primStart,end:primEnd,prop:"browser",limit:10,host}),
+        P("breakdown",{start:primStart,end:primEnd,prop:"device",limit:10,host}),
+        P("breakdown",{start:primStart,end:primEnd,prop:"os",limit:10,host}),
+        P("top_events",{start:primStart,end:primEnd,limit:10,host}),
       ]);
       await sleep(400);
       const[browsers,devices,os,events]=batch3;
       const batch4=await Promise.all([
-        U(`/websites/${id}/events/series?${qs({...primary,unit,timezone:tz})}`,key,region),
-        U(`/websites/${id}/metrics?${qs({...primary,type:"channel",limit:10})}`,key,region),
+        P("event_series",{start:primStart,end:primEnd,unit,host}),
+        P("channels",{start:primStart,end:primEnd,limit:10,host}),
       ]);
       const[eventSeries,channels]=batch4;
       const fmtLabel=(x)=>{const d=new Date(x);return unit==="hour"?d.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit",hour12:false}):d.toLocaleDateString([],{weekday:"short",month:"short",day:"numeric"});};
@@ -400,7 +401,7 @@ function useAnalyticsData(cfg,site,rangeId,compareMode) {
         pages:fmtM(pages),referrers:fmtM(referrers),countries:fmtM(countries).map(c=>({...c,code:c.name.length===2?c.name:""})),
         browsers:fmtM(browsers),devices:fmtM(devices),os:fmtM(os),events:fmtM(events),
         eventSeries:Object.values(eventsByHour).sort((a,b)=>a.label.localeCompare(b.label)),topEventNames:[...eventNames].slice(0,5),
-        channels:fmtM(channels),pageSpeed,seoAudit,siteHealthError,umamiStaleSource,pageSpeedStale,pageSpeedCachedAt});
+        channels:fmtM(channels),pageSpeed,seoAudit,siteHealthError,analyticsStaleSource,pageSpeedStale,pageSpeedCachedAt});
     }catch(e){setError(e.message);}finally{setLoading(false);}
   },[cfg,site,rangeId,compareMode]);
   useEffect(()=>{fetchAll();},[fetchAll]);
@@ -855,10 +856,10 @@ const Dashboard=({cfg,site,useMock,onSettings,rangeId,onRangeChange,compareMode,
       </div>
     </div>
 
-    {/* Stale-data banner: surfaces when Umami/PageSpeed served from cache */}
-    {(data.umamiStaleSource||data.pageSpeedStale)&&(()=>{
+    {/* Stale-data banner: surfaces when PostHog/PageSpeed served from cache */}
+    {(data.analyticsStaleSource||data.pageSpeedStale)&&(()=>{
       const labels=[];
-      if(data.umamiStaleSource){labels.push(data.umamiStaleSource==="quota"?"Umami quota reached":"Umami unreachable");}
+      if(data.analyticsStaleSource){labels.push(data.analyticsStaleSource==="quota"?"PostHog quota reached":"PostHog unreachable");}
       if(data.pageSpeedStale){labels.push("PageSpeed unavailable");}
       const psiAgo=data.pageSpeedCachedAt?Math.round((Date.now()-data.pageSpeedCachedAt)/3600000):null;
       return (<div style={{display:"flex",alignItems:"flex-start",gap:S.md,padding:`${S.md}px ${S.lg}px`,marginBottom:S.xxxl,background:"rgba(217,170,90,0.05)",border:`1px solid ${C.accentBdr}`,borderRadius:12}}>
@@ -2574,7 +2575,7 @@ const SettingsPage=({ctxFiles,brandAssets,defaults,onUpdateDefaults,saveState})=
           <Heading eyebrow="Integrations" accent={SECTION_COLORS.integrations} desc="Connected services and API keys.">Integrations</Heading>
           <div style={{display:"grid",gap:S.md}}>
             {[
-              {name:"Umami Cloud",desc:"Privacy-friendly analytics",status:"connected",color:C.green},
+              {name:"PostHog",desc:"Product analytics — pageviews, sessions, breakdowns",status:"connected",color:C.green},
               {name:"Groq AI",desc:"Llama 3.3 70B + 3.1 8B Instant for content & insights",status:"connected",color:C.green},
               {name:"Google PageSpeed Insights",desc:"Performance, SEO, accessibility audits (Lighthouse)",status:"connected",color:C.green},
               {name:"Supabase",desc:"Auth, data storage, file storage",status:"connected",color:C.green},
@@ -2600,12 +2601,7 @@ const SettingsPage=({ctxFiles,brandAssets,defaults,onUpdateDefaults,saveState})=
             <div>
               <label style={{display:"block",marginBottom:S.sm-2}}><Eyebrow>Domain</Eyebrow></label>
               <input value={defaults.siteDomain||""} onChange={e=>onUpdateDefaults({siteDomain:e.target.value.trim()})} placeholder="honoroll.io" style={{width:"100%",background:C.surfaceInset,border:`1px solid ${C.border}`,borderRadius:8,padding:`${S.md-2}px ${S.md}px`,fontSize:T.body,fontFamily:mono,color:C.bright,outline:"none",boxSizing:"border-box"}}/>
-              <div style={{fontSize:T.eyebrow,color:C.dim,marginTop:S.xs,fontFamily:mono}}>Used for PageSpeed and SEO audits. No protocol — just the bare domain.</div>
-            </div>
-            <div>
-              <label style={{display:"block",marginBottom:S.sm-2}}><Eyebrow>Umami Website ID</Eyebrow></label>
-              <input type="password" value={defaults.umamiWebsiteId||""} onChange={e=>onUpdateDefaults({umamiWebsiteId:e.target.value.trim()})} placeholder="••••••••-••••-••••-••••-••••••••••••" autoComplete="off" spellCheck="false" style={{width:"100%",background:C.surfaceInset,border:`1px solid ${C.border}`,borderRadius:8,padding:`${S.md-2}px ${S.md}px`,fontSize:T.body,fontFamily:mono,color:C.bright,outline:"none",boxSizing:"border-box",letterSpacing:"0.1em"}}/>
-              <div style={{fontSize:T.eyebrow,color:C.dim,marginTop:S.xs,fontFamily:mono}}>UUID from cloud.umami.is. Drives all analytics queries. Masked to avoid accidental exposure in screenshots.</div>
+              <div style={{fontSize:T.eyebrow,color:C.dim,marginTop:S.xs,fontFamily:mono}}>Used for PageSpeed / SEO audits AND as the PostHog host filter (only events from this domain are shown). Leave blank to include every host on the project.</div>
             </div>
             <div>
               <label style={{display:"block",marginBottom:S.sm-2}}><Eyebrow>Mock data mode</Eyebrow></label>
