@@ -22,10 +22,12 @@ export default async function handler(req, res) {
   }
   try {
     const base = `https://api.umami.is/v1${region ? `/${region}` : ""}`;
+    // Umami Cloud API uses Bearer auth (not the old x-umami-api-key header).
+    // Docs: https://docs.umami.is/docs/api/authentication
     const response = await fetch(`${base}${path}`, {
       headers: {
         "Accept": "application/json",
-        "x-umami-api-key": process.env.UMAMI_API_KEY,
+        "Authorization": `Bearer ${process.env.UMAMI_API_KEY}`,
       },
     });
     if (!response.ok) {
