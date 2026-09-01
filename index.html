@@ -615,7 +615,7 @@ Rules:
 - Be data-driven. Reference actual numbers. Keep it concise.
 - Return raw JSON only.`;
 
-let ACTIVE_AI_MODEL="llama-3.3-70b-versatile";
+let ACTIVE_AI_MODEL="openai/gpt-oss-120b";
 function setActiveAIModel(m){if(typeof m==="string"&&m)ACTIVE_AI_MODEL=m;}
 
 async function callLLM(systemPrompt,userMessage,maxTokens=4096){
@@ -2734,10 +2734,10 @@ const useContextFiles=(user)=>{
 // ─── Data: useUserSettings hook (Supabase) ────────────────────────────────────
 // Single row per user (auto-created by trigger on signup). Uses upsert defensively.
 const AI_MODELS=[
-  {id:"llama-3.3-70b-versatile",label:"Llama 3.3 70B",tag:"Quality",icon:"◉",desc:"Higher quality output. Slower (~10-15s). Tight rate limit on Groq free tier — best for important pieces."},
-  {id:"llama-3.1-8b-instant",label:"Llama 3.1 8B Instant",tag:"Speed",icon:"⚡",desc:"Faster (~2-4s), much higher rate limit. Best for high-volume drafting and quick iteration."},
+  {id:"openai/gpt-oss-120b",label:"GPT-OSS 120B",tag:"Quality",icon:"◉",desc:"Higher quality output. Slower (~5-10s). Tight rate limit on Groq free tier — best for important pieces."},
+  {id:"openai/gpt-oss-20b",label:"GPT-OSS 20B",tag:"Speed",icon:"⚡",desc:"Faster (~1-3s), much higher rate limit. Best for high-volume drafting and quick iteration."},
 ];
-const DEFAULT_AI_MODEL="llama-3.3-70b-versatile";
+const DEFAULT_AI_MODEL="openai/gpt-oss-120b";
 const DEFAULT_SITE_NAME="Honoroll";
 const DEFAULT_SITE_DOMAIN="honoroll.io";
 const DEFAULT_UMAMI_WEBSITE_ID="b383e359-7384-45e0-81b4-0a33ba905df3";

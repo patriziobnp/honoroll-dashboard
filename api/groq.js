@@ -27,8 +27,10 @@ export default async function handler(req, res) {
   }
 
   // Whitelist allowed models to prevent the proxy being used as an open Groq gateway
-  const ALLOWED_MODELS = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"];
-  const chosenModel = ALLOWED_MODELS.includes(model) ? model : "llama-3.3-70b-versatile";
+  // llama-3.3-70b-versatile + llama-3.1-8b-instant were deprecated on Groq
+  // 2026-06-17; Groq's own recommended replacements are the gpt-oss models.
+  const ALLOWED_MODELS = ["openai/gpt-oss-120b", "openai/gpt-oss-20b"];
+  const chosenModel = ALLOWED_MODELS.includes(model) ? model : "openai/gpt-oss-120b";
 
   const body = JSON.stringify({
     model: chosenModel,
