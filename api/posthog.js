@@ -13,7 +13,7 @@ import { requireAuth } from "./_auth.js";
 //   POSTHOG_PROJECT_ID — numeric project id (required)
 //   POSTHOG_HOST       — "us.posthog.com" or "eu.posthog.com" (default us)
 
-export const config = { maxDuration: 30 };
+export const config = { maxDuration: 60 };
 
 const isoDate = (v) => typeof v === "string" && /^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?)?Z?$/.test(v);
 const isoHost = (v) => typeof v === "string" && v.length <= 253 && /^[A-Za-z0-9.-]+$/.test(v);
@@ -106,6 +106,7 @@ const QUERIES = {
       ${hostClause(host)}
     GROUP BY bucket, event
     ORDER BY bucket, value DESC
+    LIMIT 1000
   `,
 };
 
