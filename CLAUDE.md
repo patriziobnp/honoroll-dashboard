@@ -5,8 +5,8 @@ This file gives Claude (in Claude Code or any Claude-powered tool) immediate con
 ## What This Is
 
 A single-page marketing dashboard for Honoroll combining:
-- **Analytics** (Umami Cloud + PageSpeed + SEO Score) with AI-powered insights
-- **Content generation** (X posts, threads, articles via Groq + Llama 3.3 70B)
+- **Analytics** (PostHog + PageSpeed + SEO Score) with AI-powered insights
+- **Content generation** (X posts, threads, articles via Groq + GPT-OSS 120B)
 - **Content calendar** with scheduling, X-style preview, and per-entry image uploads
 - **UTM link builder** with history, search, and filter
 - **Settings**: Context Files, Brand Assets, Integrations, Site, Defaults
@@ -52,19 +52,25 @@ Files are accessed via 1-hour signed URLs, batch-fetched on load.
 
 ```
 api/
-  groq.js     → Llama 3.3 70B via Groq (system + user prompt → text)
-  umami.js    → Umami Cloud analytics (path passthrough, region optional)
-  seo.js      → SEO Score API (domain → audit JSON)
+  _auth.js     → Supabase JWT validation + per-user rate limiter
+  groq.js      → GPT-OSS 120B/20B via Groq (system + user prompt → text)
+  posthog.js   → PostHog HogQL analytics (type-dispatch, Umami-shaped output)
+  pagespeed.js → Google PageSpeed Insights (Lighthouse perf/SEO/a11y)
+  x-post.js    → OAuth 1.0a-signed single-tweet poster w/ optional image
+  keepalive.js → daily Vercel cron to keep Supabase free-tier alive
 index.html    → Entire frontend in one file with inline JSX in <script type="text/babel">
 vercel.json   → Routes /api/* to serverless functions
-.env.example  → Required: UMAMI_API_KEY, GROQ_API_KEY, SEO_SCORE_API_KEY
+.env.example  → PostHog + Groq + PageSpeed + X credentials
 ```
 
 ## Environment Variables (Vercel Project Settings)
 
-- `UMAMI_API_KEY` — from cloud.umami.is
+- `POSTHOG_API_KEY` — personal API key (scopes: query:read, insight:read)
+- `POSTHOG_PROJECT_ID` — numeric project id
+- `POSTHOG_HOST` — us.posthog.com or eu.posthog.com
 - `GROQ_API_KEY` — from console.groq.com
-- `SEO_SCORE_API_KEY` — from seoscoreapi.com
+- `PAGESPEED_API_KEY` — Google Cloud API key restricted to PageSpeed Insights
+- `X_API_KEY` / `X_API_SECRET` / `X_ACCESS_TOKEN` / `X_ACCESS_TOKEN_SECRET` / `X_USERNAME` — for direct X posting
 
 Supabase credentials are NOT environment variables — the publishable (anon) key and URL are baked into `index.html`. They are safe to expose; security comes from RLS, not from secret keys.
 
@@ -129,7 +135,7 @@ The auth gate is split into outer `App` (only calls `useAuth`) and inner `Authen
 ## Don't Do
 
 - Don't introduce a build step (keep Vite/webpack out — single HTML file is the design)
-- Don't put API keys for Groq/Umami/SEO in `index.html` (always use proxies)
+- Don't put API keys for Groq/PostHog/PageSpeed/X in `index.html` (always use proxies)
 - Don't use localStorage for data that needs to persist across devices — use Supabase
 - Don't use `<Line>` inside `<AreaChart>` — use `<ComposedChart>` for mixed series
 - Don't enable public Supabase signups — invitation-only is the design
@@ -139,6 +145,7 @@ The auth gate is split into outer `App` (only calls `useAuth`) and inner `Authen
 - **Supabase docs:** https://supabase.com/docs
 - **Supabase JS client:** https://supabase.com/docs/reference/javascript/introduction
 - **Recharts docs:** https://recharts.org/en-US/api
-- **Umami API:** https://umami.is/docs/api
+- **PostHog HogQL:** https://posthog.com/docs/hogql
+- **PostHog Query API:** https://posthog.com/docs/api/query
 - **Groq API:** https://console.groq.com/docs
 - **Vercel serverless:** https://vercel.com/docs/functions
