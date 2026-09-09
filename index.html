@@ -2610,7 +2610,7 @@ const SettingsPage=({ctxFiles,brandAssets,defaults,onUpdateDefaults,saveState})=
             <div>
               <label style={{display:"block",marginBottom:S.sm-2}}><Eyebrow>Domain</Eyebrow></label>
               <input value={defaults.siteDomain||""} onChange={e=>onUpdateDefaults({siteDomain:e.target.value.trim()})} placeholder="honoroll.io" style={{width:"100%",background:C.surfaceInset,border:`1px solid ${C.border}`,borderRadius:8,padding:`${S.md-2}px ${S.md}px`,fontSize:T.body,fontFamily:mono,color:C.bright,outline:"none",boxSizing:"border-box"}}/>
-              <div style={{fontSize:T.eyebrow,color:C.dim,marginTop:S.xs,fontFamily:mono}}>Used for PageSpeed / SEO audits AND as the PostHog host filter (only events from this domain are shown). Leave blank to include every host on the project.</div>
+              <div style={{fontSize:T.eyebrow,color:C.dim,marginTop:S.xs,fontFamily:mono}}>Used for PageSpeed / SEO audits. Analytics include this site's root domain and all its subdomains (e.g. testnet.honoroll.io also counts staging.testnet.honoroll.io). Leave blank to include every host on the PostHog project.</div>
             </div>
             <div>
               <label style={{display:"block",marginBottom:S.sm-2}}><Eyebrow>Mock data mode</Eyebrow></label>

@@ -21,9 +21,16 @@ const isoInt = (v, max) => Number.isInteger(+v) && +v >= 0 && +v <= max;
 const isoUnit = (v) => v === "hour" || v === "day";
 
 const sq = (s) => String(s).replace(/'/g, "''");
-// HogQL accesses $-prefixed properties via bracket notation to avoid parser
-// issues; use properties['$host'] rather than properties.$host.
-const hostClause = (host) => host ? ` AND properties['$host'] = '${sq(host)}'` : "";
+// Host filter matches the site's root domain and every subdomain of it, so a
+// site_domain of testnet.honoroll.io also includes staging.testnet.honoroll.io
+// while still excluding localhost / unrelated hosts. Root = last two labels.
+// HogQL: $-prefixed properties use bracket notation (properties['$host']).
+const rootDomain = (host) => host.split(".").slice(-2).join(".");
+const hostClause = (host) => {
+  if (!host) return "";
+  const root = sq(rootDomain(host));
+  return ` AND (properties['$host'] = '${root}' OR endsWith(properties['$host'], '.${root}'))`;
+};
 
 const QUERIES = {
   stats: ({ start, end, host }) => `
