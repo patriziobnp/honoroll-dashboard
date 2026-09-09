@@ -162,7 +162,8 @@ function reshape(type, objects) {
     case "breakdown":
     case "top_events":
     case "channels":
-      return objects.map((r) => ({ x: r.name, y: r.value || 0 }));
+      // PostHog labels direct traffic "$direct"; show a human label instead.
+      return objects.map((r) => ({ x: r.name === "$direct" ? "Direct" : r.name, y: r.value || 0 }));
     case "event_series":
       return objects.map((r) => ({ t: r.bucket, x: r.name, y: r.value || 0 }));
     default:
