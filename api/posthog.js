@@ -117,6 +117,47 @@ const QUERIES = {
   `,
 };
 
+// One request for every breakdown table. Each branch is its own top-N
+// subquery (ORDER BY/LIMIT are not allowed directly inside UNION ALL branches).
+const BREAKDOWN_KINDS = {
+  path: "properties['$pathname']",
+  referrer: "properties['$referring_domain']",
+  country: "properties['$geoip_country_code']",
+  browser: "properties['$browser']",
+  device: "properties['$device_type']",
+  os: "properties['$os']",
+};
+QUERIES.breakdowns = ({ start, end, host, limit }) => {
+  const range = `timestamp >= toDateTime('${sq(start)}') AND timestamp < toDateTime('${sq(end)}')${hostClause(host)}`;
+  const props = Object.entries(BREAKDOWN_KINDS).map(([kind, expr]) => `
+    SELECT * FROM (
+      SELECT '${kind}' AS kind, ${expr} AS name, count() AS value
+      FROM events
+      WHERE event = '$pageview' AND ${expr} IS NOT NULL AND ${expr} != '' AND ${range}
+      GROUP BY name ORDER BY value DESC LIMIT ${limit}
+    )`);
+  const events = `
+    SELECT * FROM (
+      SELECT 'event' AS kind, event AS name, count() AS value
+      FROM events
+      WHERE event NOT LIKE '$%' AND ${range}
+      GROUP BY name ORDER BY value DESC LIMIT ${limit}
+    )`;
+  const channels = `
+    SELECT * FROM (
+      SELECT 'channel' AS kind, coalesce(properties['utm_source'], 'Direct') AS name, count() AS value
+      FROM events
+      WHERE event = '$pageview' AND ${range}
+      GROUP BY name ORDER BY value DESC LIMIT ${limit}
+    )`;
+  return [...props, events, channels].join("\n    UNION ALL\n");
+};
+
+// Short-lived per-instance memo so several users (or tabs) loading the same
+// range within a minute share one PostHog call.
+const MEMO_TTL_MS = 60_000;
+const memo = new Map();
+
 const BREAKDOWN_PROPS = {
   path: "properties['$pathname']",
   referrer: "properties['$referring_domain']",
@@ -164,6 +205,14 @@ function reshape(type, objects) {
     case "channels":
       // PostHog labels direct traffic "$direct"; show a human label instead.
       return objects.map((r) => ({ x: r.name === "$direct" ? "Direct" : r.name, y: r.value || 0 }));
+    case "breakdowns": {
+      const out = {};
+      for (const r of objects) {
+        (out[r.kind] ||= []).push({ x: r.name === "$direct" ? "Direct" : r.name, y: r.value || 0 });
+      }
+      for (const list of Object.values(out)) list.sort((a, b) => b.y - a.y);
+      return out;
+    }
     case "event_series":
       return objects.map((r) => ({ t: r.bucket, x: r.name, y: r.value || 0 }));
     default:
@@ -213,8 +262,16 @@ export default async function handler(req, res) {
   }
   else if (type === "top_events") queryString = QUERIES.top_events({ start, end, host, limit });
   else if (type === "channels") queryString = QUERIES.channels({ start, end, host, limit });
+  else if (type === "breakdowns") queryString = QUERIES.breakdowns({ start, end, host, limit });
   else if (type === "event_series") queryString = QUERIES.event_series({ start, end, unit, host });
   else return res.status(400).json({ error: "Unknown query type" });
+
+  const hit = memo.get(queryString);
+  if (hit && Date.now() - hit.ts < MEMO_TTL_MS) {
+    res.setHeader("Cache-Control", "s-maxage=60, stale-while-revalidate=120");
+    res.setHeader("X-Cache", "memo");
+    return res.status(200).json(hit.data);
+  }
 
   try {
     // PostHog current Query API endpoint uses /environments/{id}/; the older

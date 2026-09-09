@@ -300,9 +300,16 @@ function useAnalyticsData(cfg,site,rangeId,compareMode) {
     const comparison=getComparisonRange(rangeId,compareMode);
     const unit=getTimeUnit(rangeId);
     // PostHog HogQL takes ISO datetime strings; our ranges are epoch ms.
-    const iso=(ms)=>new Date(ms).toISOString();
-    const primStart=iso(primary.startAt),primEnd=iso(primary.endAt);
-    const host=site.domain||"";
+    // Snap to 5-minute boundaries (start down, end up) so the cache key is
+    // stable across reloads within the freshness window instead of changing
+    // every millisecond — otherwise every tab reopen refetched everything.
+    const ROUND_MS=5*60*1000;
+    const isoStart=(ms)=>new Date(Math.floor(ms/ROUND_MS)*ROUND_MS).toISOString();
+    const isoEnd=(ms)=>new Date(Math.ceil(ms/ROUND_MS)*ROUND_MS).toISOString();
+    const primStart=isoStart(primary.startAt),primEnd=isoEnd(primary.endAt);
+    // The server matches root domain + subdomains; normalise here too so the
+    // built-in default and the loaded site setting share one cache entry.
+    const host=(site.domain||"").split(".").slice(-2).join(".");
     // Track whether any analytics call in this batch served stale data. The UI
     // uses this to show a small "stale data" pill instead of a hard error.
     let analyticsStaleSource=null;
@@ -314,37 +321,31 @@ function useAnalyticsData(cfg,site,rangeId,compareMode) {
     try{
       const batch1=await Promise.all([
         P("stats",{start:primStart,end:primEnd,host},zeroStats),
-        comparison?P("stats",{start:iso(comparison.startAt),end:iso(comparison.endAt),host},zeroStats):Promise.resolve(zeroStats),
+        comparison?P("stats",{start:isoStart(comparison.startAt),end:isoEnd(comparison.endAt),host},zeroStats):Promise.resolve(zeroStats),
         P("active",{host},{visitors:0}),
         P("timeseries",{start:primStart,end:primEnd,unit,host},{pageviews:[],sessions:[]}),
-      ]);
-      await sleep(400);
-      const[statsToday,statsYesterday,active,timeSeries]=batch1;
-      const batch2=await Promise.all([
-        P("breakdown",{start:primStart,end:primEnd,prop:"path",limit:10,host},[]),
-        P("breakdown",{start:primStart,end:primEnd,prop:"referrer",limit:10,host},[]),
-        P("breakdown",{start:primStart,end:primEnd,prop:"country",limit:10,host},[]),
-      ]);
-      await sleep(400);
-      const[pages,referrers,countries]=batch2;
-      const batch3=await Promise.all([
-        P("breakdown",{start:primStart,end:primEnd,prop:"browser",limit:10,host},[]),
-        P("breakdown",{start:primStart,end:primEnd,prop:"device",limit:10,host},[]),
-        P("breakdown",{start:primStart,end:primEnd,prop:"os",limit:10,host},[]),
-        P("top_events",{start:primStart,end:primEnd,limit:10,host},[]),
-      ]);
-      await sleep(400);
-      const[browsers,devices,os,events]=batch3;
-      const batch4=await Promise.all([
+        // All eight breakdown tables come back from one UNION ALL query — PostHog
+        // personal API keys are limited to ~120 /query calls per hour, so this
+        // keeps a full load at 5 requests instead of 12.
+        P("breakdowns",{start:primStart,end:primEnd,limit:10,host},{}),
         P("event_series",{start:primStart,end:primEnd,unit,host},[]),
-        P("channels",{start:primStart,end:primEnd,limit:10,host},[]),
       ]);
-      const[eventSeries,channels]=batch4;
+      const[statsToday,statsYesterday,active,timeSeries,bd,eventSeries]=batch1;
+      const pages=bd.path||[],referrers=bd.referrer||[],countries=bd.country||[],browsers=bd.browser||[],devices=bd.device||[],os=bd.os||[],events=bd.event||[],channels=bd.channel||[];
       const fmtLabel=(x)=>{const d=new Date(x);return unit==="hour"?d.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit",hour12:false}):d.toLocaleDateString([],{weekday:"short",month:"short",day:"numeric"});};
       const timeData=(timeSeries.pageviews||[]).map((pv,i)=>({label:fmtLabel(pv.x),pageviews:pv.y,sessions:timeSeries.sessions?.[i]?.y||0}));
       const fmtM=(arr)=>(arr||[]).map(m=>({name:m.x,value:m.y}));
       const eventsByHour={};const eventNames=new Set();
       (eventSeries||[]).forEach(e=>{const h=fmtLabel(e.t);if(!eventsByHour[h])eventsByHour[h]={label:h};eventsByHour[h][e.x]=(eventsByHour[h][e.x]||0)+e.y;eventNames.add(e.x);});
+      const analytics={statsToday,statsYesterday,active:active.visitors||0,timeSeries:timeData,unit,
+        pages:fmtM(pages),referrers:fmtM(referrers),countries:fmtM(countries).map(c=>({...c,code:c.name.length===2?c.name:""})),
+        browsers:fmtM(browsers),devices:fmtM(devices),os:fmtM(os),events:fmtM(events),
+        eventSeries:Object.values(eventsByHour).sort((a,b)=>a.label.localeCompare(b.label)),topEventNames:[...eventNames].slice(0,5),
+        channels:fmtM(channels),analyticsStaleSource};
+      // Render the analytics immediately; Lighthouse can take 20–60s and used to
+      // hold the whole tab on skeletons until it finished.
+      setData({...analytics,pageSpeed:null,seoAudit:null,siteHealthError:null,siteHealthLoading:true,pageSpeedStale:false,pageSpeedCachedAt:null});
+      setLoading(false);
       let pageSpeed=null,seoAudit=null,pageSpeedStale=false,pageSpeedCachedAt=null;
       const psiCacheKey=`honoroll_pagespeed_${site.domain}`;
       const PSI_TTL_MS=24*60*60*1000;
@@ -406,11 +407,7 @@ function useAnalyticsData(cfg,site,rangeId,compareMode) {
           }
         }
       }
-      setData({statsToday,statsYesterday,active:active.visitors||0,timeSeries:timeData,unit,
-        pages:fmtM(pages),referrers:fmtM(referrers),countries:fmtM(countries).map(c=>({...c,code:c.name.length===2?c.name:""})),
-        browsers:fmtM(browsers),devices:fmtM(devices),os:fmtM(os),events:fmtM(events),
-        eventSeries:Object.values(eventsByHour).sort((a,b)=>a.label.localeCompare(b.label)),topEventNames:[...eventNames].slice(0,5),
-        channels:fmtM(channels),pageSpeed,seoAudit,siteHealthError,analyticsStaleSource,pageSpeedStale,pageSpeedCachedAt});
+      setData({...analytics,pageSpeed,seoAudit,siteHealthError,siteHealthLoading:false,pageSpeedStale,pageSpeedCachedAt});
     }catch(e){setError(e.message);}finally{setLoading(false);}
   },[cfg,site,rangeId,compareMode]);
   useEffect(()=>{fetchAll();},[fetchAll]);
@@ -890,9 +887,13 @@ const Dashboard=({cfg,site,useMock,onSettings,rangeId,onRangeChange,compareMode,
     </SectionCard>
 
     {/* Site Health */}
-    {(data.pageSpeed||data.seoAudit||data.siteHealthError)&&<SectionCard accent={SECTION_COLORS.health}>
+    {(data.pageSpeed||data.seoAudit||data.siteHealthError||data.siteHealthLoading)&&<SectionCard accent={SECTION_COLORS.health}>
       <Heading eyebrow="Site Health" accent={SECTION_COLORS.health} desc="Google Lighthouse via PageSpeed Insights. Current state, refreshed once per day.">Performance & SEO</Heading>
       {(data.pageSpeed||data.seoAudit)?<SiteHealth pagespeed={data.pageSpeed} seoscore={data.seoAudit}/>
+      :data.siteHealthLoading?(<div style={{display:"flex",alignItems:"center",gap:S.md,padding:`${S.lg}px ${S.xl}px`,background:C.surfaceInset,border:`1px solid ${C.border}`,borderRadius:12,fontSize:T.caption,color:C.muted,fontFamily:mono}}>
+          {[0,1,2].map(i=>(<span key={i} style={{width:5,height:5,borderRadius:"50%",background:C.muted,animation:`pulse 1.2s ease-in-out ${i*0.2}s infinite`}}/>))}
+          <span>Running Lighthouse audit — usually 15–30 seconds.</span>
+        </div>)
       :(()=>{
         // Translate technical error patterns into human-friendly headlines + hints
         const raw=String(data.siteHealthError||"");
