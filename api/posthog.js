@@ -117,6 +117,7 @@ const BREAKDOWN_PROPS = {
   browser: "properties['$browser']",
   device: "properties['$device_type']",
   os: "properties['$os']",
+  host: "properties['$host']",
 };
 
 // Convert PostHog {columns, results} → array of column-keyed objects.
