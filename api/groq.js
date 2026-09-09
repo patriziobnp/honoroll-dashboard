@@ -32,14 +32,20 @@ export default async function handler(req, res) {
   const ALLOWED_MODELS = ["openai/gpt-oss-120b", "openai/gpt-oss-20b"];
   const chosenModel = ALLOWED_MODELS.includes(model) ? model : "openai/gpt-oss-120b";
 
+  // gpt-oss are reasoning models: hidden reasoning tokens count against
+  // max_tokens, and with our long content prompts they could exhaust the whole
+  // budget and return empty content. Keep reasoning low and give the completion
+  // headroom above what the client asked for its visible output.
   const body = JSON.stringify({
     model: chosenModel,
     messages: [
       { role: "system", content: system },
       { role: "user", content: userMsg },
     ],
-    max_tokens,
+    max_tokens: Math.min(Number(max_tokens) + 4096, 16384),
     temperature,
+    reasoning_effort: "low",
+    include_reasoning: false,
   });
 
   // Retry on 429 with backoff. Groq returns Retry-After (seconds) when available.
@@ -58,8 +64,15 @@ export default async function handler(req, res) {
       });
       if (response.ok) {
         const data = await response.json();
-        const text = data.choices?.[0]?.message?.content || "";
-        return res.status(200).json({ text });
+        const choice = data.choices?.[0] || {};
+        const text = (choice.message?.content || "").trim();
+        if (!text) {
+          const why = choice.finish_reason === "length"
+            ? "the model hit its token limit before producing output"
+            : `finish_reason=${choice.finish_reason || "unknown"}`;
+          return res.status(502).json({ error: `AI returned an empty response (${why}). Try again or switch model in Settings.` });
+        }
+        return res.status(200).json({ text, finish_reason: choice.finish_reason || null });
       }
       lastResponse = response;
       lastErrText = await response.text().catch(() => "");
