@@ -3273,7 +3273,11 @@ function AuthenticatedApp({user,signOut}){
   // cache and other utilities scope their localStorage keys per-user.
   useEffect(()=>{setCurrentUserId(user?.id);return()=>setCurrentUserId(null);},[user?.id]);
   // Derive the analytics site object from user settings
-  const site={id:userSettings.settings.umamiWebsiteId,name:userSettings.settings.siteName,domain:userSettings.settings.siteDomain};
+  // Memoized: useAnalyticsData keys its fetch on this object's identity, so a
+  // fresh object per render would refetch on every AuthenticatedApp re-render
+  // (and, via onData → setLiveAnalytics, loop forever).
+  const{umamiWebsiteId:siteId,siteName,siteDomain}=userSettings.settings;
+  const site=React.useMemo(()=>({id:siteId,name:siteName,domain:siteDomain}),[siteId,siteName,siteDomain]);
   const useMock=userSettings.settings.useMockData;
   // One-time cleanup of old localStorage entry
   useEffect(()=>{try{if(typeof localStorage!=="undefined")localStorage.removeItem("honoroll_defaults");}catch(e){}},[]);
