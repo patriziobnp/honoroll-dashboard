@@ -270,16 +270,20 @@ function getCompareLabel(rangeId,compareMode) {
 const ANALYTICS_INFLIGHT=new Map();
 async function posthogFetch(type,params,opts){
   const markStale=opts&&typeof opts.markStale==="function"?opts.markStale:null;
-  const cached=readAnalyticsCache(type,params);
+  // Cache is per-user; until the user id is known, don't read or write it.
+  const canCache=!!CURRENT_USER_ID;
+  const cached=canCache?readAnalyticsCache(type,params):null;
   const now=Date.now();
   if(cached&&(now-cached.ts)<ANALYTICS_FRESH_MS){return cached.data;}
-  const key=analyticsCacheKey(type,params);
-  if(ANALYTICS_INFLIGHT.has(key))return ANALYTICS_INFLIGHT.get(key);
   const url=`/api/posthog?${qs({type,...params})}`;
+  // In-flight de-dupe is keyed on the URL, not the per-user cache key, so two
+  // runs started before/after the user id lands still share one request.
+  if(ANALYTICS_INFLIGHT.has(url))return ANALYTICS_INFLIGHT.get(url);
+  const key=url;
   const run=(async()=>{
     try{
       const res=await authedFetch(url,{headers:{"Accept":"application/json"}});
-      if(res.ok){const data=await res.json();writeAnalyticsCache(type,params,data);return data;}
+      if(res.ok){const data=await res.json();if(canCache||CURRENT_USER_ID)writeAnalyticsCache(type,params,data);return data;}
       // Live call failed. Fall back to stale cache if we have it.
       if(cached){if(markStale)markStale(res.status===429?"quota":`http-${res.status}`);return cached.data;}
       let bodySnippet="";
@@ -3296,6 +3300,10 @@ function AuthenticatedApp({user,signOut}){
   const useMock=userSettings.settings.useMockData;
   // One-time cleanup of old localStorage entry
   useEffect(()=>{try{if(typeof localStorage!=="undefined")localStorage.removeItem("honoroll_defaults");}catch(e){}},[]);
+  // Prune analytics cache entries older than a day so localStorage can't fill
+  // up with dead keys (an earlier key scheme could leave thousands behind).
+  useEffect(()=>{try{if(typeof localStorage==="undefined")return;const cutoff=Date.now()-24*60*60*1000;
+    Object.keys(localStorage).filter(k=>k.startsWith("honoroll_analytics_")).forEach(k=>{let ts=0;try{ts=JSON.parse(localStorage.getItem(k)||"{}").ts||0;}catch(e){}if(ts<cutoff)localStorage.removeItem(k);});}catch(e){}},[]);
   // Calendar entries now stored in Supabase (per user)
   const calendarEntries=useCalendarEntries(user);
   // Latest dataset the Analytics tab loaded (live or mock) — fed to ContentPage
