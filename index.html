@@ -3272,7 +3272,11 @@ function AuthenticatedApp({user,signOut}){
   useEffect(()=>{setActiveAIModel(userSettings.settings.aiModel);},[userSettings.settings.aiModel]);
   // Mirror user id to the module-level CURRENT_USER_ID so the Umami client
   // cache and other utilities scope their localStorage keys per-user.
-  useEffect(()=>{setCurrentUserId(user?.id);return()=>setCurrentUserId(null);},[user?.id]);
+  // Layout effect on purpose: passive child effects (the analytics fetch) run
+  // before a parent's passive effects, so a plain useEffect here left
+  // CURRENT_USER_ID null for the first fetch — that run cached under the wrong
+  // key and the tab loaded everything twice on every open.
+  React.useLayoutEffect(()=>{setCurrentUserId(user?.id);return()=>setCurrentUserId(null);},[user?.id]);
   // Derive the analytics site object from user settings
   // Memoized: useAnalyticsData keys its fetch on this object's identity, so a
   // fresh object per render would refetch on every AuthenticatedApp re-render
