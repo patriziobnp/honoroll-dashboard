@@ -264,27 +264,37 @@ function getCompareLabel(rangeId,compareMode) {
 // - On any failure (4xx/5xx/network), returns any cached value regardless of
 //   age and calls markStale() so the UI can flag the section as stale.
 // - Throws only when both the live call and the cache are unavailable.
+// Identical requests issued while one is still in flight share its promise
+// (e.g. the settings-driven re-run that starts before the first run's
+// responses have been cached).
+const ANALYTICS_INFLIGHT=new Map();
 async function posthogFetch(type,params,opts){
   const markStale=opts&&typeof opts.markStale==="function"?opts.markStale:null;
   const cached=readAnalyticsCache(type,params);
   const now=Date.now();
   if(cached&&(now-cached.ts)<ANALYTICS_FRESH_MS){return cached.data;}
+  const key=analyticsCacheKey(type,params);
+  if(ANALYTICS_INFLIGHT.has(key))return ANALYTICS_INFLIGHT.get(key);
   const url=`/api/posthog?${qs({type,...params})}`;
-  try{
-    const res=await authedFetch(url,{headers:{"Accept":"application/json"}});
-    if(res.ok){const data=await res.json();writeAnalyticsCache(type,params,data);return data;}
-    // Live call failed. Fall back to stale cache if we have it.
-    if(cached){if(markStale)markStale(res.status===429?"quota":`http-${res.status}`);return cached.data;}
-    let bodySnippet="";
-    try{const j=await res.json();
-      if(j&&j.error){const e=typeof j.error==="object"?JSON.stringify(j.error):String(j.error);bodySnippet=` — ${e.slice(0,240)}`;}
-      else if(j){bodySnippet=` — ${JSON.stringify(j).slice(0,240)}`;}
-    }catch(e){try{bodySnippet=` — ${(await res.text()).slice(0,240)}`;}catch(e2){}}
-    throw new Error(`PostHog ${type}: ${res.status}${bodySnippet}`);
-  }catch(networkErr){
-    if(cached){if(markStale)markStale("network");return cached.data;}
-    throw networkErr;
-  }
+  const run=(async()=>{
+    try{
+      const res=await authedFetch(url,{headers:{"Accept":"application/json"}});
+      if(res.ok){const data=await res.json();writeAnalyticsCache(type,params,data);return data;}
+      // Live call failed. Fall back to stale cache if we have it.
+      if(cached){if(markStale)markStale(res.status===429?"quota":`http-${res.status}`);return cached.data;}
+      let bodySnippet="";
+      try{const j=await res.json();
+        if(j&&j.error){const e=typeof j.error==="object"?JSON.stringify(j.error):String(j.error);bodySnippet=` — ${e.slice(0,240)}`;}
+        else if(j){bodySnippet=` — ${JSON.stringify(j).slice(0,240)}`;}
+      }catch(e){try{bodySnippet=` — ${(await res.text()).slice(0,240)}`;}catch(e2){}}
+      throw new Error(`PostHog ${type}: ${res.status}${bodySnippet}`);
+    }catch(networkErr){
+      if(cached){if(markStale)markStale("network");return cached.data;}
+      throw networkErr;
+    }
+  })();
+  ANALYTICS_INFLIGHT.set(key,run);
+  try{return await run;}finally{ANALYTICS_INFLIGHT.delete(key);}
 }
 function qs(params){return Object.entries(params).filter(([,v])=>v!=null&&v!=="").map(([k,v])=>`${k}=${encodeURIComponent(v)}`).join("&");}
 
