@@ -784,12 +784,14 @@ const AIInsights=({analyticsData,contextFiles})=>{
 };
 
 // ─── Dashboard ───────────────────────────────────────────────────────────────
-const Dashboard=({cfg,site,useMock,onSettings,rangeId,onRangeChange,compareMode,onCompareChange,contextFiles})=>{
+const Dashboard=({cfg,site,useMock,onSettings,rangeId,onRangeChange,compareMode,onCompareChange,contextFiles,onData})=>{
   const realData=useAnalyticsData(useMock?null:cfg,useMock?null:site,rangeId,compareMode);
   const data=useMock?MOCK_DATA:realData.data;
   const loading=useMock?false:realData.loading;
   const error=useMock?null:realData.error;
   const refresh=useMock?()=>{}:realData.refresh;
+  // Share the loaded dataset upward so other tabs (Content) can use real numbers.
+  useEffect(()=>{if(onData)onData(data||null);},[data,onData]);
   const[lastUpdated,setLastUpdated]=useState(Date.now());
   const[refreshing,setRefreshing]=useState(false);
   // Tick every 30s to update "X ago" label
@@ -1151,7 +1153,9 @@ const EditableText=({value,onChange,maxChars,style:customStyle})=>{
   const[draft,setDraft]=useState(value);
   const textareaRef=useRef(null);
   useEffect(()=>{setDraft(value);},[value]);
-  useEffect(()=>{if(editing&&textareaRef.current){textareaRef.current.focus();textareaRef.current.style.height="auto";textareaRef.current.style.height=textareaRef.current.scrollHeight+"px";}});
+  // Focus + autosize only when entering edit mode. Without the deps array this
+  // ran on every render and stole focus from whatever else the user was typing in.
+  useEffect(()=>{if(editing&&textareaRef.current){textareaRef.current.focus();textareaRef.current.style.height="auto";textareaRef.current.style.height=textareaRef.current.scrollHeight+"px";}},[editing]);
   const save=()=>{onChange(draft);setEditing(false);};
   const cancel=()=>{setDraft(value);setEditing(false);};
   const insertEmoji=(emoji)=>{
@@ -2116,9 +2120,26 @@ const ArticleCard=({article,onUpdateBody,onUpdateHeadline,onSchedule,scheduledDa
   </div>);
 };
 
+// Module-level so they keep a stable identity across ContentPage renders.
+// (Defined inside ContentPage they were re-created on every keystroke, which
+// remounted every generator button.)
+const GenBtn=({onClick,loading,exists,color,children})=>{
+  const primary=!loading&&!exists;
+  return (<button onClick={onClick} disabled={loading} style={{padding:`${S.md-2}px ${S.xl}px`,fontSize:T.body,fontWeight:600,fontFamily:font,cursor:loading?"not-allowed":"pointer",transition:"all 0.2s",borderRadius:10,border:exists?`1px solid ${C.border}`:"none",background:primary?`linear-gradient(135deg,${color},${color}D9)`:exists?C.surfaceElevated:C.surface,color:primary?C.bg:loading?C.muted:C.bright,opacity:loading?0.6:1,boxShadow:primary?`0 6px 16px ${color}33`:"none",display:"inline-flex",alignItems:"center",gap:S.sm}}>
+    {loading?<>{[0,1,2].map(i=>(<span key={i} style={{width:5,height:5,borderRadius:"50%",background:C.muted,animation:`pulse 1.2s ease-in-out ${i*0.2}s infinite`}}/>))}<span style={{marginLeft:S.xs}}>Generating</span></>:exists?<>↻ Regenerate</>:children}
+  </button>);
+};
+// Section header + actions row used at the top of each generator SectionCard
+const SectionHeader=({eyebrow,accent,title,desc,actions})=>(<div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end",gap:S.lg,flexWrap:"wrap",marginBottom:S.lg}}>
+  <Heading eyebrow={eyebrow} accent={accent} desc={desc}>{title}</Heading>
+  {actions&&<div style={{display:"flex",gap:S.sm,alignItems:"center",flexWrap:"wrap"}}>{actions}</div>}
+</div>);
+
 // ─── Content Page ────────────────────────────────────────────────────────────
 const ContentPage=({analyticsData,contentState,setContentState,contextFiles,defaults,onUpdateDefaults,calendarEntries})=>{
-  const ctx=buildMarketingContext(analyticsData);
+  // analyticsData is whatever the Analytics tab last loaded (live or mock);
+  // null until that tab has fetched once.
+  const ctx=analyticsData?buildMarketingContext(analyticsData):{summary:"No analytics loaded yet (open the Analytics tab to fetch live numbers)."};
   const[tone,setTone]=useState(contentState.tone||defaults?.tone||"founder");
   // Topic ("what to write about") is persisted in user_settings.content_topic
   // and edited locally with a debounced upsert. Local mirror keeps typing snappy.
@@ -2167,19 +2188,6 @@ const ContentPage=({analyticsData,contentState,setContentState,contextFiles,defa
   const genArticle=async()=>{setArticleLoading(true);setArticleError("");try{const r=await generateArticle(makePrompt(X_ARTICLE_PROMPT,tone,articleLength,"article",topic),fullCtx);setArticle(r);}catch(e){setArticleError(e.message);}finally{setArticleLoading(false);}};
   const formatThread=(arr)=>arr.map((t,i)=>`${i+1}/${arr.length}\n${t.tweet}`).join("\n\n---\n\n");
   const formatThreadTypefully=(arr)=>arr.map(t=>t.tweet).join("\n\n🧵\n\n");
-
-  const GenBtn=({onClick,loading,exists,color,children})=>{
-    const primary=!loading&&!exists;
-    return (<button onClick={onClick} disabled={loading} style={{padding:`${S.md-2}px ${S.xl}px`,fontSize:T.body,fontWeight:600,fontFamily:font,cursor:loading?"not-allowed":"pointer",transition:"all 0.2s",borderRadius:10,border:exists?`1px solid ${C.border}`:"none",background:primary?`linear-gradient(135deg,${color},${color}D9)`:exists?C.surfaceElevated:C.surface,color:primary?C.bg:loading?C.muted:C.bright,opacity:loading?0.6:1,boxShadow:primary?`0 6px 16px ${color}33`:"none",display:"inline-flex",alignItems:"center",gap:S.sm}}>
-      {loading?<>{[0,1,2].map(i=>(<span key={i} style={{width:5,height:5,borderRadius:"50%",background:C.muted,animation:`pulse 1.2s ease-in-out ${i*0.2}s infinite`}}/>))}<span style={{marginLeft:S.xs}}>Generating</span></>:exists?<>↻ Regenerate</>:children}
-    </button>);
-  };
-
-  // Section header + actions row used at the top of each generator SectionCard
-  const SectionHeader=({eyebrow,accent,title,desc,actions})=>(<div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end",gap:S.lg,flexWrap:"wrap",marginBottom:S.lg}}>
-    <Heading eyebrow={eyebrow} accent={accent} desc={desc}>{title}</Heading>
-    {actions&&<div style={{display:"flex",gap:S.sm,alignItems:"center",flexWrap:"wrap"}}>{actions}</div>}
-  </div>);
 
   return (<div style={{maxWidth:1280,margin:"0 auto",padding:`${S.xl}px ${S.xxl-4}px`,position:"relative"}}>
     <PageBackdrop color="rgba(140,217,90,0.06)"/>
@@ -3271,6 +3279,9 @@ function AuthenticatedApp({user,signOut}){
   useEffect(()=>{try{if(typeof localStorage!=="undefined")localStorage.removeItem("honoroll_defaults");}catch(e){}},[]);
   // Calendar entries now stored in Supabase (per user)
   const calendarEntries=useCalendarEntries(user);
+  // Latest dataset the Analytics tab loaded (live or mock) — fed to ContentPage
+  // so generated content references real stats instead of the hardcoded mock.
+  const[liveAnalytics,setLiveAnalytics]=useState(null);
 
   const handleTabChange=(t)=>{setShowSettings(false);setTab(t);};
   const handleSettings=()=>setShowSettings(s=>!s);
@@ -3281,8 +3292,8 @@ function AuthenticatedApp({user,signOut}){
       {showSettings?(<div style={{animation:"fadeIn 0.3s ease-out"}}><SettingsPage ctxFiles={ctxFiles} brandAssets={brandAssets} defaults={userSettings.settings} onUpdateDefaults={userSettings.updateSettings} saveState={userSettings.saveState}/></div>)
       :(<>
         {/* All tab panels are kept mounted; visibility is toggled via display:none so each tab keeps its in-memory state (analytics data, scroll position, drafts) until the user explicitly refreshes. */}
-        <div style={{display:tab==="analytics"?"block":"none"}}><Dashboard cfg={KEYS} site={site} useMock={useMock} onSettings={handleSettings} rangeId={rangeId} onRangeChange={setRangeId} compareMode={compareMode} onCompareChange={setCompareMode} contextFiles={ctxFiles.files}/></div>
-        <div style={{display:tab==="content"?"block":"none"}}><ContentPage analyticsData={MOCK_DATA} contentState={contentState} setContentState={setContentState} contextFiles={ctxFiles.files} defaults={userSettings.settings} onUpdateDefaults={userSettings.updateSettings} calendarEntries={calendarEntries}/></div>
+        <div style={{display:tab==="analytics"?"block":"none"}}><Dashboard cfg={KEYS} site={site} useMock={useMock} onSettings={handleSettings} rangeId={rangeId} onRangeChange={setRangeId} compareMode={compareMode} onCompareChange={setCompareMode} contextFiles={ctxFiles.files} onData={setLiveAnalytics}/></div>
+        <div style={{display:tab==="content"?"block":"none"}}><ContentPage analyticsData={liveAnalytics} contentState={contentState} setContentState={setContentState} contextFiles={ctxFiles.files} defaults={userSettings.settings} onUpdateDefaults={userSettings.updateSettings} calendarEntries={calendarEntries}/></div>
         <div style={{display:tab==="utm"?"block":"none"}}><UtmPage utmLinks={utmLinks}/></div>
       </>)}
     </div>
