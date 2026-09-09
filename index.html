@@ -2598,7 +2598,7 @@ const SettingsPage=({ctxFiles,brandAssets,defaults,onUpdateDefaults,saveState})=
               {name:"Google PageSpeed Insights",desc:"Performance, SEO, accessibility audits (Lighthouse)",status:"connected",color:C.green},
               {name:"Supabase",desc:"Auth, data storage, file storage",status:"connected",color:C.green},
               {name:"Telegram Bot",desc:"Funnel attribution & community management",status:"coming_soon",color:C.dim},
-              {name:"X / Twitter Posting",desc:"Automated post scheduling",status:"coming_soon",color:C.dim},
+              {name:"X / Twitter Posting",desc:"Direct single-tweet posting with image (OAuth 1.0a) from the calendar preview",status:"connected",color:C.green},
             ].map((int,i)=>(<div key={i} style={{background:C.surfaceElevated,border:`1px solid ${C.border}`,borderRadius:10,padding:`${S.md+2}px ${S.lg+2}px`,display:"flex",alignItems:"center",gap:S.md,flexWrap:"wrap"}}>
               <div style={{flex:1,minWidth:200}}>
                 <div style={{fontSize:T.body+1,fontWeight:600,color:C.bright,marginBottom:S.xs/2}}>{int.name}</div>
